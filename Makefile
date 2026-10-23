@@ -12,7 +12,7 @@ WAILS := $(shell go env GOPATH)/bin/wails
 # 递归展开只在使用到它的 recipe 里求值，那时 require-dist 前置检查已通过。
 GO_PKGS = $(shell go list ./... | grep -v node_modules)
 
-.PHONY: help dev build test lint smoke package gen verify-gen require-dist
+.PHONY: help dev build test lint smoke package linux-deb gen verify-gen require-dist
 
 help: ## 列出所有命令及用途
 	@echo "可用命令："
@@ -56,6 +56,9 @@ smoke: ## 冒烟测试（构建 → 启动 → 断言 → 清理）
 
 package: ## 打包真安装包（make package os=windows|macos|linux [scope=user|machine]）
 	bash scripts/package.sh $(os) $(scope)
+
+linux-deb: ## 构建 Kylin/Linux .deb（macOS 上自动用 Ubuntu 20.04 容器）
+	bash scripts/package.sh linux
 
 gen: ## 生成新模块（锚点注入 + 幂等）—— make gen name=<module>
 	bash scripts/gen.sh $(name)

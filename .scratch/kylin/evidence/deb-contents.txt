@@ -1,0 +1,12 @@
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/bin/
+-rwxr-xr-x root/root  19386664 2026-10-23 12:34 ./usr/bin/ImageWorkshop
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/applications/
+-rw-r--r-- root/root       485 2026-10-23 12:34 ./usr/share/applications/imageworkshop.desktop
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/icons/
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/icons/hicolor/
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/icons/hicolor/1024x1024/
+drwxr-xr-x root/root         0 2026-10-23 12:34 ./usr/share/icons/hicolor/1024x1024/apps/
+-rw-r--r-- root/root    132625 2026-10-23 12:34 ./usr/share/icons/hicolor/1024x1024/apps/imageworkshop.png

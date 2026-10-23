@@ -7,7 +7,8 @@
 #   - windows [user|machine] → 交叉编译 Windows .exe 安装器（mac/linux 上可用），
 #                         scope 默认 user（免管理员）
 #   - macos             → 仅 mac 上可用，产出美化 dmg（含 Applications 软链）
-#   - linux             → 仅 linux 上可用，否则报错
+#   - linux             → 产出 .deb；Linux 上原生构建，mac/Windows 上经 Docker
+#                         在 Ubuntu 20.04 环境构建（Kylin glibc 2.31 / WebKit 4.0）
 #
 # 母版防呆：检测到 file-processor 占位符残留则拒绝打包（母版不能直接打包）。
 # ==========================================================================
@@ -16,7 +17,6 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-WAILS="$(go env GOPATH)/bin/wails"
 OS="${1:-}"
 SCOPE="${2:-user}"   # windows 安装范围：user（默认，免管理员）/ machine
 
@@ -57,8 +57,10 @@ case "$TARGET" in
     fi
     ;;
   linux)
-    if [ "$CUR_PLATFORM" != "linux" ]; then
-      echo "错误：Linux 包只能在 linux 上打包（Wails 不支持交叉编译 linux）。" >&2
+    # 非 Linux 宿主需要 Docker：Wails 不能直接交叉编译 Linux，改在 Ubuntu 20.04
+    # 容器内构建（001：麒麟 glibc 2.31 / 仅 WebKit 4.0-37）。
+    if [ "$CUR_PLATFORM" != "linux" ] && ! command -v docker >/dev/null 2>&1; then
+      echo "错误：在非 Linux 上打 Linux 包需要 Docker（Ubuntu 20.04 构建环境）。" >&2
       exit 1
     fi
     ;;
@@ -196,14 +198,14 @@ APPLESCRIPT
     fi
     ;;
   linux)
-    # webkit 版本标签：wails 默认按 webkit2gtk-4.0 做 cgo 链接，而 Ubuntu 24.04+ /
-    # Debian 13+ 只提供 4.1，需 -tags webkit2_41 才切过去（否则报找不到 webkit2gtk-4.0）。
-    # Ubuntu 22.04+ 两者都有，故该标签对在支持期内的发行版都成立。
-    #
-    # Linux 不在 CI 的编译矩阵内（理由见 .github/workflows/build.yml），
-    # 此路径供本地打包使用，未经 CI 验证。
-    bash scripts/build.sh -clean -tags webkit2_41
-    echo "✓ 已生成: build/bin/${APP_NAME}"
+    # 麒麟只提供 webkit2gtk-4.0（001），因此绝不能用 webkit2_41。
+    # Linux 宿主若只有 4.1（Ubuntu 24.04+），同样回落到 20.04 容器。
+    if [ "$CUR_PLATFORM" = "linux" ] && pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
+      bash scripts/build.sh -clean
+    else
+      bash scripts/build-linux-container.sh
+    fi
+    bash scripts/package-deb.sh
     ;;
   windows)
     if command -v makensis >/dev/null 2>&1; then

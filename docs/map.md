@@ -67,11 +67,14 @@
 | `.github/workflows/` | `build.yml`（检查 + 编译矩阵）、`release.yml`（tag 触发自动发布） |
 | `scripts/gen.sh` | 模块生成器（`make gen name=<module>`） |
 | `scripts/verify-gen.sh` | 生成器端到端验证（`make verify-gen`） |
-| `scripts/package.sh` | 打包（dmg / NSIS 安装器） |
+| `scripts/package.sh` | 打包（dmg / NSIS 安装器 / Linux .deb；非 Linux 宿主经 Docker） |
+| `scripts/build-linux-container.sh` | Ubuntu 20.04 容器内构建 linux/amd64（macOS 交叉编译） |
+| `scripts/package-deb.sh` | 把已构建的 linux/amd64 二进制打成 `.deb` |
 | `scripts/release.sh` | 版本号 + 打包 + release 说明 |
 | `scripts/smoke.sh` | 冒烟测试（构建 → 启动 → 断言 → 清理） |
 | `build/darwin/` | macOS 打包资源（Info.plist、dmg 背景模板） |
 | `build/windows/` | Windows 打包资源（manifest、NSIS 脚本） |
+| `build/linux/` | Linux 打包资源（desktop entry、Ubuntu 20.04 构建镜像） |
 
 ## 自动生成（勿手改）
 

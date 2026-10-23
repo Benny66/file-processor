@@ -1,0 +1,14 @@
+ new Debian package, version 2.0.
+ size 6299496 bytes: control archive=560 bytes.
+     473 bytes,    11 lines      control              
+ Package: imageworkshop
+ Version: 0.1.0
+ Architecture: amd64
+ Maintainer: bennywen <bennywen@tencentmusic.com>
+ Installed-Size: 19072
+ Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.0-37 (>= 2.28.1)
+ Section: graphics
+ Priority: optional
+ Description: 图片工坊 — 批量图片格式转换、目标体积压缩与尺寸调整
+  本地批量转换图片格式、压缩到目标体积，并按宽高上限等比缩放。
+  图片只在本机处理，不上传、不联网。

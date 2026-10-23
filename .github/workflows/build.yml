@@ -36,15 +36,62 @@ jobs:
       - name: Run lint
         run: make lint
 
-  # 编译矩阵（只编译，不启动 GUI）。
+  # Linux .deb 单独成 job（见下方 linux-deb）：
+  #   - 麒麟 V10 SP1 是 glibc 2.31 + 仅 WebKitGTK 4.0-37，与 Ubuntu 20.04 一致；
+  #   - 因此固定 container: ubuntu:20.04，而不是跟随 runner 镜像漂移；
+  #   - 产物 .deb 作为 artifact 上传，供真机安装冒烟。
   #
-  # 刻意【不含 Linux】：Linux 产物要求系统装了哪个 webkit 版本（wails 默认找
-  # webkit2gtk-4.0，而 Ubuntu 24.04+/Debian 13+ 只有 4.1，需 -tags webkit2_41），
-  # 这类环境耦合让「编译通过」取决于 runner 镜像的包，维护成本高于收益。
-  # Linux 仍可本地打包（见 README 的打包说明），但不在 CI 的验证承诺内。
-  #
-  # Linux 的 Go 层覆盖仍由上面的 check job（ubuntu-latest）承担：
-  # test / vet / lint / 护栏 / 生成器端到端都在那里跑。
+  # 桌面编译矩阵（只编译，不启动 GUI）只含 macOS/Windows。
+
+  # Kylin / Linux .deb 构建（glibc 2.31 + WebKitGTK 2.28.1）
+  linux-deb:
+    needs: check
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    steps:
+      # ubuntu:20.04 最小镜像没有 git，checkout 之前必须先装
+      - name: Install git for checkout
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl file \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev=2.28.1-1 \
+            libwebkit2gtk-4.0-37=2.28.1-1 \
+            gir1.2-webkit2-4.0=2.28.1-1 \
+            libjavascriptcoregtk-4.0-dev=2.28.1-1 \
+            libjavascriptcoregtk-4.0-18=2.28.1-1 \
+            gir1.2-javascriptcoregtk-4.0=2.28.1-1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+
+      - name: Build frontend
+        run: cd frontend && npm install && npm run build
+
+      - name: Build and package .deb
+        run: bash scripts/package.sh linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: build/bin/*.deb
+          if-no-files-found: error
   build:
     needs: check
     strategy:

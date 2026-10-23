@@ -10,9 +10,9 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
 
 ## 涉及层
 
-- [ ] 数据层：`.deb` 元数据、desktop entry、图标、Depends 清单；不改应用数据模型。
-- [ ] 逻辑层：按 001 的结论选择构建容器（glibc 不高于麒麟）与 Wails WebKit 标签；容器内使用 Go 1.26.x；扩展 `scripts/package.sh` 的 Linux 路径以产出 `.deb`；新增可重复的 make 目标；新增 Linux CI 构建与制品上传；按 spike 结论处理 Linux 关闭/托盘行为，移除对 `webkit2_41` 的硬编码假设。
-- [ ] UI 层：不新增 UI；验证对话框、拖拽、关闭行为。
+- [x] 数据层：`.deb` 元数据、desktop entry、图标、Depends 清单；不改应用数据模型。
+- [x] 逻辑层：按 001 的结论选择构建容器（glibc 不高于麒麟）与 Wails WebKit 标签；容器内使用 Go 1.26.x；扩展 `scripts/package.sh` 的 Linux 路径以产出 `.deb`；新增可重复的 make 目标；新增 Linux CI 构建与制品上传；按 spike 结论处理 Linux 关闭/托盘行为，移除对 `webkit2_41` 的硬编码假设。
+- [x] UI 层：不新增 UI；验证对话框、拖拽、关闭行为。
 - [ ] 测试：CI 构建；麒麟真机安装/启动/关闭；`ldd` 检查；依赖完整性；macOS/Windows 原有构建不回归。
 
 ## 验收标准
@@ -28,7 +28,23 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
 
 ## 完成记录
 
-- 状态：待开始
+- 状态：进行中（本地 `.deb` 已产出并静态验证；待 CI 运行与麒麟真机安装/启动）
 - 实现说明：
+  - 构建：新增 `build/linux/Dockerfile`（Ubuntu 20.04 / Go 1.26.2 / WebKitGTK 4.0 **2.28.1**）。x86_64 宿主原生 gcc；Apple Silicon 用原生 arm64 容器 + clang/lld 交叉编译 x86_64（QEMU 模拟 amd64 在 dpkg/Go 阶段会段错误，已放弃）。
+  - 打包：新增 `scripts/package-deb.sh`：`/usr/bin/ImageWorkshop`、`/usr/share/applications/imageworkshop.desktop`、hicolor 1024 图标；Depends `libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.0-37 (>= 2.28.1)`；宿主无 `dpkg-deb` 时用容器打包。
+  - 入口：`scripts/package.sh linux` 改为产出 `.deb`（Linux 原生；macOS/Windows 经 Docker），新增 `make linux-deb`；`scripts/release.sh` 的 Linux 产物改为 `.deb`。
+  - CI：`build.yml` 新增 `linux-deb` job（`container: ubuntu:20.04`，WebKitGTK 2.28.1，上传 `linux-deb` artifact）。
+  - 关闭/托盘：001 已改为运行期判定；Linux 不再硬编码 `webkit2_41`。
 - 验收证据：
+  - `make linux-deb` 全链路通过（前端 → 构建镜像 → 容器内 wails build → .deb）。
+  - 产物：`build/bin/ImageWorkshop_0.1.0_amd64.deb`（6.0 MB，SHA256 `5eca0f45f0e0206c4a743f445b288d82d8966aec84c31931b69fe8378713bbb9`）。
+  - `dpkg-deb -I`：Package imageworkshop / Version 0.1.0 / Architecture amd64 / Depends 如上述；`-c` 路径与权限正确（`./` 为 0755）。
+  - 解包二进制：ELF64 x86-64；NEEDED 覆盖 `libc6`、`libgtk-3-0`、`libwebkit2gtk-4.0-37` 及其传递依赖（映射见 `.scratch/kylin/evidence/deb-needs.txt`）。
+  - 在 focal multiarch 容器 `dpkg -i` 安装成功（`install ok installed`），桌面文件与图标触发正常；证据见 `.scratch/kylin/evidence/deb-*.txt`。
+  - `make test` / `make lint` / `make build`（macOS）通过。
 - 偏离与遗留：
+  - **未在麒麟真机安装/启动**，也未执行 CI（未推送）；011 不能标记完成。
+  - `release.yml` 的 tag 发布仍只有 macOS/Windows 两条腿，Linux `.deb` 目前只在 `build.yml` 上传 artifact；接入 Release 留给 013。
+  - Windows 构建未在本地复跑；本次改动只触及 Linux 分支与新增脚本，macOS 构建已回归。
+  - `StartupWMClass=ImageWorkshop` 与麒麟 UKUI 的实际 WM_CLASS 需真机确认；不稳定时只影响任务栏分组。
+  - 安装路径使用 `/usr/bin/ImageWorkshop`（US-35 的英文标识），不是小写 `imageworkshop`。

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=图片工坊
+Name[en]=ImageWorkshop
+Comment=批量图片格式转换、目标体积压缩与尺寸调整
+Comment[en]=Batch image conversion, compression and resizing
+Exec=ImageWorkshop %F
+TryExec=ImageWorkshop
+Icon=imageworkshop
+Terminal=false
+Categories=Graphics;Photography;
+Keywords=image;convert;compress;resize;图片;转换;压缩;尺寸;
+MimeType=image/jpeg;image/png;image/webp;image/bmp;image/tiff;image/gif;
+StartupWMClass=ImageWorkshop

@@ -38,7 +38,7 @@ bash scripts/init.sh myapp com.mycompany   # 第二个参数可选：macOS bundl
 | Go | ≥ 1.26 | `go version` 确认 |
 | Node | ≥ 20 | `node --version` 确认 |
 | Wails CLI | v2.15+ | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` |
-| 平台依赖 | — | Windows 需 WebView2；Linux 需 `libgtk-3-dev libwebkit2gtk-4.1-dev` + 构建时带 `-tags webkit2_41`（见下「已知限制」） |
+| 平台依赖 | — | Windows 需 WebView2；Linux 原生构建需 `libgtk-3-dev libwebkit2gtk-4.0-dev`（Kylin/Ubuntu 20.04，默认 4.0 tag）；macOS 上打 Linux 包需 Docker（见「打包与发布」） |
 
 ## 快速开始
 
@@ -59,6 +59,7 @@ make package   # 打包安装包
 | `make dev` | 启动开发态（wails dev，前端热更新） |
 | `make build` | 编译当前平台产物（快速，.app 不封装 dmg） |
 | `make package` | 打包真安装包（`make package os=windows\|macos\|linux`） |
+| `make linux-deb` | 构建 Kylin/Linux `.deb`（macOS 上自动用 Ubuntu 20.04 容器） |
 | `make test` | 运行 Go 测试（含架构护栏） |
 | `make lint` | 静态检查（护栏 + go vet + ESLint） |
 | `make smoke` | 冒烟测试（构建 → 启动 → 断言 → 清理） |
@@ -130,10 +131,16 @@ make package                          # 打包当前平台真安装包
 make package os=windows               # 交叉编译 Windows .exe 安装器（默认 scope=user）
 make package os=windows scope=machine # 装到 Program Files（需管理员）
 make package os=macos                 # 仅 mac 上可用（Wails 不支持交叉编译 mac）
-make package os=linux                 # 仅 linux 上可用（Wails 不支持交叉编译 linux）；未在 CI 验证
+make package os=linux                 # 产出 .deb；Linux 原生构建，macOS 上自动用 Ubuntu 20.04 容器
+make linux-deb                        # 同上（语义化入口）
 ```
 
 - **产物位置**：`build/bin/`。
+
+- **Linux / 麒麟安装包**：产出 `build/bin/ImageWorkshop_<version>_amd64.deb`，安装到
+  `/usr/bin/ImageWorkshop`，含 desktop entry 与 hicolor 图标。构建固定 Ubuntu 20.04 /
+  glibc 2.31 / WebKitGTK 4.0 2.28.1（麒麟 V10 SP1 的实际版本）；macOS 上经 Docker
+  交叉编译，不依赖宿主 GTK。首次构建会拉取构建镜像依赖。
 
 - **macOS 安装**：产出 `.dmg`，内含 `MyApp.app` + `Applications` 软链 + 拖拽引导（背景图/箭头）。
   用户**拖拽 app 到 Applications** 即完成安装。macOS 没有"安装"动作——`.app` 本身就是完整应用。
@@ -158,8 +165,9 @@ make package os=linux                 # 仅 linux 上可用（Wails 不支持交
 - **母版防呆**：含占位符时拒绝打包，需先 `scripts/init.sh` 实例化。
 - CI：`.github/workflows/build.yml` 在 push/PR 时自动跑
   **静态检查**（`make test` / `make lint`，ubuntu）+ **macOS/Windows 编译**（产物上传为 artifact）
-  + **生成器端到端验证**（`make verify-gen`，macos 腿）。
-  Linux 的 Go 层覆盖由静态检查腿承担；Linux **产物编译不在矩阵内**（理由见下「已知限制」）。
+  + **生成器端到端验证**（`make verify-gen`，macos 腿）
+  + **Linux `.deb`**（`linux-deb` job：固定 `container: ubuntu:20.04`、WebKitGTK 2.28.1，上传 artifact）。
+  Linux 的 Go 层覆盖仍由静态检查腿承担。
 - **自动发布（推荐）**：打 tag 即自动出 Release——
   ```bash
   git tag v0.1.0 && git push origin v0.1.0
@@ -178,12 +186,12 @@ make package os=linux                 # 仅 linux 上可用（Wails 不支持交
 
 - **macOS 无系统托盘**：Wails v2 的 NSApplication delegate 与所有 systray 库冲突（详见 `openspec/changes/runtime/design.md` D1），故 macOS 关闭即退出，托盘能力仅在 Windows/Linux 提供。
 - **无 headless 模式**：冒烟测试定位为本地验证，CI 只编译不启动 GUI。
-- **Linux 产物编译不在 CI 验证范围内**：Wails 在 Linux 上按 **webkit2gtk 版本**做 cgo 链接
-  ——默认找 `webkit2gtk-4.0`，而 Ubuntu 24.04+ / Debian 13+ 只提供 4.1，必须带
-  `-tags webkit2_41` 才切得过去。这是「取决于 runner 镜像装了什么包」的环境耦合，
-  维护成本高于收益，故编译矩阵只保留 macOS / Windows。
-  `make package os=linux` 仍可用（脚本已带该标签，但本地需自行确认），**无 CI 背书**；
-  Linux 的 Go 层行为（测试/护栏/生成器端到端）仍由 CI 的 ubuntu 静态检查腿覆盖。
+- **Kylin/Linux 构建固定 Ubuntu 20.04**：麒麟 V10 SP1 是 glibc 2.31 + 仅 WebKitGTK
+  4.0-37 2.28.1，因此 Linux 产物必须在固定的 Ubuntu 20.04 环境构建（CI 用 container，
+  macOS 用 Docker），不能依赖宿主发行版的默认 GTK/WebKit。只有 4.1 的发行版
+  （Ubuntu 24.04+/Debian 13+）不在本产品支持范围内。
+- **tag Release 暂不含 Linux `.deb`**：`build.yml` 会产出并上传 `linux-deb` artifact；
+  `release.yml` 目前仍只有 macOS/Windows 两条腿，Linux 接入留给 013。
 - **窗口位置不持久化**：只记住尺寸与最大化。Wails v2 没有创建期位置选项，运行期设置与
   窗口显示存在竞态（会看到跳动），且需屏幕边界夹取，否则窗口可能还原到已拔掉的显示器上
   （详见 `openspec/changes/runtime-pipeline/design.md` D1）。

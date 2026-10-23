@@ -37,3 +37,6 @@ Thumbs.db
 # ---- Kylin spike 产物 ----
 # Linux 冒烟二进制体积大，走 U 盘交付，不入库
 /.scratch/kylin/out/
+
+# .deb 打包临时目录
+/build/.deb-staging.*

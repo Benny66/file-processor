@@ -1,0 +1,29 @@
+Selecting previously unselected package imageworkshop:amd64.
+(Reading database ... 36552 files and directories currently installed.)
+Preparing to unpack .../ImageWorkshop_0.1.0_amd64.deb ...
+Unpacking imageworkshop:amd64 (0.1.0) ...
+Setting up imageworkshop:amd64 (0.1.0) ...
+Processing triggers for mime-support (3.64ubuntu1) ...
+Processing triggers for hicolor-icon-theme (0.17-2) ...
+Package: imageworkshop
+Status: install ok installed
+Priority: optional
+Section: graphics
+Installed-Size: 19072
+Maintainer: bennywen <bennywen@tencentmusic.com>
+Architecture: amd64
+Version: 0.1.0
+Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.0-37 (>= 2.28.1)
+Description: 图片工坊 — 批量图片格式转换、目标体积压缩与尺寸调整
+/.
+/usr
+/usr/bin
+/usr/bin/ImageWorkshop
+/usr/share
+/usr/share/applications
+/usr/share/applications/imageworkshop.desktop
+/usr/share/icons
+/usr/share/icons/hicolor
+/usr/share/icons/hicolor/1024x1024
+/usr/share/icons/hicolor/1024x1024/apps
+/usr/share/icons/hicolor/1024x1024/apps/imageworkshop.png
