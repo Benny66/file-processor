@@ -27,7 +27,16 @@
 
 ## 完成记录
 
-- 状态：待开始
+- 状态：进行中（macOS 打包与启动已验；待 Windows、麒麟真机与完整 UI 走查）
 - 实现说明：
+  - 本切片不做产品代码修改；截至当前只执行了 macOS 产物构建与启动级冒烟。
 - 验收证据：
+  - `make package os=macos` 成功产出 `build/bin/ImageWorkshop.dmg`（7.7 MB，SHA256 `fa89422032abef6fc7d35ad453d98d7c00b36402471a540d44933d70754bb85b`）。
+  - 只读挂载 dmg：包含 `ImageWorkshop.app` 与 `Applications` 软链；Info.plist 版本 0.1.0，bundle id 为占位 `com.example.imageworkshop`（发布前需替换，D-32）。
+  - 从挂载卷启动 `.app`：进程存活；app.log 显示版本 0.1.0、日志/数据库/配置初始化、前端挂载 146ms；macOS 按设计跳过托盘；数据目录生成 `ImageWorkshop.db`、`config.json`、`app.log`。证据：`.scratch/kylin/evidence/macos-startup-log.txt`、`macos-dmg-sha256.txt`。
+  - `make test` / `make lint` / `make build` 通过。
+  - 未完成：完整 UI 走查（六种输入格式、目标体积、宽高盒、对比、预设、重启恢复、源文件不变、无网络请求）；Windows 安装/启动（本机无 Windows 真机/VM，且未安装 NSIS）；麒麟 `.deb` 安装与处理。
 - 偏离与遗留：
+  - dmg 无 Finder 美化（本会话无 GUI/Finder 自动化权限），但不影响挂载与安装；`STRICT_POLISH` 未开启。
+  - 尝试 AppleScript 退出应用被系统拒绝（-128），最终终止进程；因此优雅退出与窗口几何落盘未在本轮验证。
+  - 麒麟/Windows 真机未就绪，012 不能标记完成；013 及 tag Release 的 Linux 接入仍被阻塞。

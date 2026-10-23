@@ -1,0 +1,8 @@
+time=2026-10-23T20:41:57.772+08:00 level=INFO msg=启动阶段 stage=数据库初始化 ms=2 total_ms=3
+time=2026-10-23T20:41:57.772+08:00 level=INFO msg=启动阶段 stage=配置加载与组装 ms=0 total_ms=3
+time=2026-10-23T20:42:29.532+08:00 level=INFO msg=应用启动 version=0.1.0 platform=darwin/arm64 log_file="/Users/bennywen/Library/Application Support/ImageWorkshop/app.log"
+time=2026-10-23T20:42:29.533+08:00 level=INFO msg=启动阶段 stage=日志初始化 ms=0 total_ms=0
+time=2026-10-23T20:42:29.536+08:00 level=INFO msg=启动阶段 stage=数据库初始化 ms=3 total_ms=3
+time=2026-10-23T20:42:29.536+08:00 level=INFO msg=启动阶段 stage=配置加载与组装 ms=0 total_ms=4
+time=2026-10-23T20:42:29.810+08:00 level=WARN msg="macOS 不支持系统托盘，托盘能力已跳过"
+time=2026-10-23T20:42:31.373+08:00 level=INFO msg="前端启动 | {\"to_js_ms\":137,\"theme_ms\":5,\"mount_ms\":7,\"total_ms\":146,\"ipc_calls\":1,\"ipc_max_ms\":3,\"ipc_slowest\":\"GetTheme\"}" source=wails
