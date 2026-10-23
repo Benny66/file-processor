@@ -1,0 +1,15 @@
+001 Linux 冒烟二进制构建记录（2026-10-23）
+
+方法：原生 arm64 Ubuntu 20.04 容器 + clang/lld 交叉编译 linux/amd64。
+原因：Apple Silicon 上 --platform linux/amd64 走 QEMU 模拟；实测 apt postinst（py3compile）
+      与 Go 编译均发生段错误，模拟环境不可用。
+工具链：Go 1.26.2 (linux/arm64)、Wails CLI v2.15.0、clang/lld (Ubuntu 20.04)、
+        GTK 3.24.20、WebKitGTK 4.0 2.28.1（与麒麟 2.28.1 对齐）。
+交叉环境：CC="clang --target=x86_64-linux-gnu"
+          CGO_LDFLAGS="-fuse-ld=lld"
+          PKG_CONFIG_LIBDIR=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
+构建命令：wails build -platform linux/amd64 -tags nodynamic -s
+产物：ImageWorkshop-linux-amd64（19,386,664 字节）
+SHA256：53df51afc36b32ad95c984ea066c92b531dfa7e58d4277e6598bc86c668ba279
+ELF：ELF64 / x86-64；GLIBC 符号需求仅 GLIBC_2.2.5、GLIBC_2.3.2（麒麟 glibc 2.31 满足）。
+依赖库清单见 needed.txt；GTK/WebKit 版本见 pkgconfig.txt。
