@@ -38,6 +38,44 @@
           </option>
         </select>
       </label>
+      <label class="field field--check">
+        <input
+          type="checkbox"
+          class="checkbox"
+          :checked="sizeBoxEnabled"
+          :disabled="busy"
+          @change="onBoxToggle"
+        />
+        <span class="field__label">限制尺寸</span>
+      </label>
+      <template v-if="sizeBoxEnabled">
+        <input
+          id="max-width"
+          class="input"
+          type="number"
+          :min="BoxDimension.Min"
+          :max="BoxDimension.Max"
+          step="1"
+          aria-label="最大宽度"
+          :value="maxWidth"
+          :disabled="busy"
+          @input="onMaxWidth"
+        />
+        <span class="field__sep">×</span>
+        <input
+          id="max-height"
+          class="input"
+          type="number"
+          :min="BoxDimension.Min"
+          :max="BoxDimension.Max"
+          step="1"
+          aria-label="最大高度"
+          :value="maxHeight"
+          :disabled="busy"
+          @input="onMaxHeight"
+        />
+        <span class="field__unit">px</span>
+      </template>
       <button class="btn btn--primary" type="button" :disabled="!canStart" @click="startBatch">
         {{ processing ? '处理中…' : '开始处理' }}
       </button>
@@ -46,8 +84,11 @@
       </button>
       <span v-if="processing" class="rules__progress">{{ processed }} / {{ total }}</span>
     </div>
-    <p v-if="items.length > 0 && outputFormat === OutputFormat.Keep" class="rules__hint">
-      当前切片只做格式转换；保持原格式需配合目标体积或尺寸规则（后续）。
+    <p v-if="items.length > 0 && sizeBoxEnabled && !sizeBoxValid" class="rules__hint">
+      宽高需为 1–65535 的整数。
+    </p>
+    <p v-else-if="items.length > 0 && !hasRule" class="rules__hint">
+      请选择输出格式，或开启尺寸限制。
     </p>
     <div
       v-if="processing"
@@ -110,7 +151,7 @@ import { service } from '../../../wailsjs/go/models'
 import { useEvent } from '../../composables/useEvent'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { OutputFormat, type OutputFormatValue } from '../../lib/image'
+import { BoxDimension, OutputFormat, type OutputFormatValue } from '../../lib/image'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
@@ -133,13 +174,26 @@ const canceling = ref(false)
 const processed = ref(0)
 const total = ref(0)
 const batchSummary = ref<string | null>(null)
+const sizeBoxEnabled = ref(false)
+const maxWidth = ref(1920)
+const maxHeight = ref(1080)
 
 const busy = computed(() => importing.value || processing.value)
+const sizeBoxValid = computed(() => {
+  if (!sizeBoxEnabled.value) return true
+  const valid = (value: number) =>
+    Number.isInteger(value) && value >= BoxDimension.Min && value <= BoxDimension.Max
+  return valid(maxWidth.value) && valid(maxHeight.value)
+})
+const hasRule = computed(
+  () => outputFormat.value !== OutputFormat.Keep || sizeBoxEnabled.value,
+)
 const canStart = computed(
   () =>
     items.value.some((item) => !item.error) &&
     !busy.value &&
-    outputFormat.value !== OutputFormat.Keep &&
+    hasRule.value &&
+    sizeBoxValid.value &&
     !items.value.some((item) => item.inspecting),
 )
 const progressPercent = computed(() =>
@@ -304,8 +358,8 @@ async function startBatch() {
       rules: {
         output_format: outputFormat.value,
         target_bytes: 0,
-        max_width: 0,
-        max_height: 0,
+        max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
+        max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
       },
     })
     const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
@@ -334,6 +388,18 @@ async function cancelBatch() {
 
 function onFormatChange(event: Event) {
   outputFormat.value = (event.target as HTMLSelectElement).value as OutputFormatValue
+}
+
+function onBoxToggle(event: Event) {
+  sizeBoxEnabled.value = (event.target as HTMLInputElement).checked
+}
+
+function onMaxWidth(event: Event) {
+  maxWidth.value = Number((event.target as HTMLInputElement).value)
+}
+
+function onMaxHeight(event: Event) {
+  maxHeight.value = Number((event.target as HTMLInputElement).value)
 }
 
 function dismissSummary() {
@@ -500,6 +566,56 @@ onUnmounted(() => {
 .select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.field--check {
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.input {
+  width: 84px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.input:hover:not(:disabled) {
+  border-color: var(--color-primary-border);
+}
+
+.input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.field__sep,
+.field__unit {
+  color: var(--text-3);
+  font-size: var(--font-size-sm);
 }
 
 .rules__progress {

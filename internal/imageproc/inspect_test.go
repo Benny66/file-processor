@@ -129,6 +129,18 @@ func TestInspectRejectsPixelLimit(t *testing.T) {
 	assertInspectError(t, pngHeaderOnly(10001, 10000), "big.png", "100 MP")
 }
 
+func TestProbeImageReturnsOrientedSize(t *testing.T) {
+	base := encodeForTest(t, "jpeg", testOpaqueImage(4, 3))
+	jpg := jpegWithOrientation(base, 6)
+	probe, err := ProbeImage(jpg, "image.jpg")
+	if err != nil {
+		t.Fatalf("ProbeImage 失败: %v", err)
+	}
+	if probe.Format != "jpeg" || probe.Width != 3 || probe.Height != 4 {
+		t.Errorf("探测结果 = %+v，期望 jpeg 3x4", probe)
+	}
+}
+
 func TestInspectChineseAndSpaces(t *testing.T) {
 	path := filepath.Join("图 片", "照 片.png")
 	info, err := Inspect(encodeForTest(t, "png", testOpaqueImage(20, 10)), path)

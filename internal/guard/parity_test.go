@@ -85,6 +85,15 @@ func TestFrontendMirrorsMatchGoSourceOfTruth(t *testing.T) {
 			tsObject: "ItemStatus",
 			goPrefix: "Status",
 		},
+		{
+			// 尺寸盒宽高范围（internal/service 的 Box*Dimension）
+			name:     "尺寸盒上下界",
+			goPkg:    "internal/service",
+			tsFile:   "frontend/src/lib/image.ts",
+			tsObject: "BoxDimension",
+			goPrefix: "Box",
+			goSuffix: "Dimension",
+		},
 	}
 
 	root := projectRoot()

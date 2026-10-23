@@ -15,6 +15,63 @@ import (
 	"file-processor/internal/apperr"
 )
 
+func TestFitWithin(t *testing.T) {
+	cases := []struct {
+		width, height, maxWidth, maxHeight int
+		wantW, wantH                       int
+	}{
+		{4000, 3000, 1920, 1080, 1440, 1080},
+		{800, 600, 1920, 1080, 800, 600},
+		{300, 400, 100, 100, 75, 100},
+		{100, 50, 100, 100, 100, 50},
+		{50, 100, 100, 100, 50, 100},
+		{1000, 10, 100, 0, 100, 1},
+		{100, 100, 0, 0, 100, 100},
+	}
+	for _, tc := range cases {
+		gotW, gotH := FitWithin(tc.width, tc.height, tc.maxWidth, tc.maxHeight)
+		if gotW != tc.wantW || gotH != tc.wantH {
+			t.Errorf("FitWithin(%d,%d,%d,%d) = %dx%d，期望 %dx%d",
+				tc.width, tc.height, tc.maxWidth, tc.maxHeight, gotW, gotH, tc.wantW, tc.wantH)
+		}
+	}
+}
+
+func TestConvertFitsWithinBox(t *testing.T) {
+	src := testOpaqueImage(400, 300)
+	got, err := Convert(
+		encodeForTest(t, "png", src),
+		"image.png",
+		ConvertOptions{Format: OutputPNG, MaxWidth: 200, MaxHeight: 200},
+	)
+	if err != nil {
+		t.Fatalf("Convert 失败: %v", err)
+	}
+	if got.Width != 200 || got.Height != 150 {
+		t.Fatalf("盒内尺寸 = %dx%d，期望 200x150", got.Width, got.Height)
+	}
+	out, err := png.Decode(bytes.NewReader(got.Data))
+	if err != nil {
+		t.Fatalf("解码输出失败: %v", err)
+	}
+	if out.Bounds().Dx() != 200 || out.Bounds().Dy() != 150 {
+		t.Errorf("输出像素尺寸 = %v", out.Bounds())
+	}
+
+	small := testOpaqueImage(100, 50)
+	got, err = Convert(
+		encodeForTest(t, "png", small),
+		"image.png",
+		ConvertOptions{Format: OutputPNG, MaxWidth: 200, MaxHeight: 200},
+	)
+	if err != nil {
+		t.Fatalf("Convert 小图失败: %v", err)
+	}
+	if got.Width != 100 || got.Height != 50 {
+		t.Errorf("小图不应放大：%+v", got)
+	}
+}
+
 func TestNormalizeOutputFormat(t *testing.T) {
 	cases := []struct {
 		format, source, want string

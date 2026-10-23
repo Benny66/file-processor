@@ -103,19 +103,23 @@ const error = computed(() => {
 })
 
 const warning = computed(() => {
+  const parts: string[] = []
   if (props.item.result?.status === ItemStatus.Skipped) {
-    return props.item.result.message || '已跳过'
+    parts.push(props.item.result.message || '已跳过')
   }
-  return props.item.info?.warning ?? ''
+  if (props.item.info?.warning) {
+    parts.push(props.item.info.warning)
+  }
+  return parts.join('；')
 })
 
 const dimensions = computed(() => {
+  const result = props.item.result
+  if (result && result.width > 0) {
+    return `${result.width} × ${result.height}`
+  }
   if (props.item.info) {
     return `${props.item.info.width} × ${props.item.info.height}`
-  }
-  const result = props.item.result
-  if (result?.status === ItemStatus.Success && result.width > 0) {
-    return `${result.width} × ${result.height}`
   }
   return ''
 })

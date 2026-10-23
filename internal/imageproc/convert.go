@@ -7,8 +7,10 @@ import (
 	"image/draw"
 	"image/jpeg"
 	"image/png"
+	"math"
 
 	genwebp "github.com/gen2brain/webp"
+	xdraw "golang.org/x/image/draw"
 
 	"file-processor/internal/apperr"
 )
@@ -27,8 +29,10 @@ const (
 
 // ConvertOptions 控制一次格式转换。
 type ConvertOptions struct {
-	Format  string
-	Quality int
+	Format    string
+	Quality   int
+	MaxWidth  int
+	MaxHeight int
 }
 
 // Converted 是一次转换的结果。
@@ -68,7 +72,7 @@ func NormalizeOutputFormat(format, sourceFormat string) (string, error) {
 	}
 }
 
-// Convert 解码、方向归一并按选项重新编码；输出不携带源文件元数据。
+// Convert 解码、方向归一并按选项缩放/重新编码；输出不携带源文件元数据。
 func Convert(data []byte, path string, opts ConvertOptions) (Converted, error) {
 	p, err := prepareImage(data, path)
 	if err != nil {
@@ -82,16 +86,63 @@ func Convert(data []byte, path string, opts ConvertOptions) (Converted, error) {
 	if quality <= 0 {
 		quality = 85
 	}
-	out, err := encodeImage(p.img, outFormat, quality)
+	outWidth, outHeight := FitWithin(p.width, p.height, opts.MaxWidth, opts.MaxHeight)
+	img := p.img
+	if outWidth != p.width || outHeight != p.height {
+		img = resizeImage(img, outWidth, outHeight)
+	}
+	out, err := encodeImage(img, outFormat, quality)
 	if err != nil {
 		return Converted{}, err
 	}
 	return Converted{
 		Data:   out,
 		Format: outFormat,
-		Width:  p.width,
-		Height: p.height,
+		Width:  outWidth,
+		Height: outHeight,
 	}, nil
+}
+
+// FitWithin 等比把图片放入宽高上限盒；任一边 <=0 表示该边不限；不放大、不裁切。
+func FitWithin(width, height, maxWidth, maxHeight int) (int, int) {
+	if width <= 0 || height <= 0 {
+		return width, height
+	}
+	boundedW := maxWidth > 0
+	boundedH := maxHeight > 0
+	if !boundedW && !boundedH {
+		return width, height
+	}
+	if (!boundedW || width <= maxWidth) && (!boundedH || height <= maxHeight) {
+		return width, height
+	}
+	scaleW := math.Inf(1)
+	if boundedW {
+		scaleW = float64(maxWidth) / float64(width)
+	}
+	scaleH := math.Inf(1)
+	if boundedH {
+		scaleH = float64(maxHeight) / float64(height)
+	}
+	scale := math.Min(scaleW, scaleH)
+	if scale >= 1 {
+		return width, height
+	}
+	w := int(math.Floor(float64(width) * scale))
+	h := int(math.Floor(float64(height) * scale))
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	return w, h
+}
+
+func resizeImage(src image.Image, width, height int) image.Image {
+	dst := image.NewNRGBA(image.Rect(0, 0, width, height))
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Src, nil)
+	return dst
 }
 
 func encodeImage(img image.Image, format string, quality int) ([]byte, error) {

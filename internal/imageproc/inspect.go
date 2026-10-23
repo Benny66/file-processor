@@ -40,16 +40,23 @@ type Info struct {
 	Warning   string `json:"warning,omitempty"`
 }
 
-// preparedImage 是检查与转换共用的解码结果（方向已归一）。
-type preparedImage struct {
-	format   string
-	width    int
-	height   int
-	img      image.Image
-	warnings []string
+// ImageProbe 是方向归一后的轻量探测结果，不包含像素。
+type ImageProbe struct {
+	Format  string `json:"format"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
+	Warning string `json:"warning,omitempty"`
 }
 
-func prepareImage(data []byte, path string) (*preparedImage, error) {
+type imageProbe struct {
+	format      string
+	orientation int
+	width       int
+	height      int
+	warnings    []string
+}
+
+func probeImage(data []byte, path string) (*imageProbe, error) {
 	if int64(len(data)) > MaxFileBytes {
 		return nil, apperr.Validation("图片超过 512 MB 上限")
 	}
@@ -89,20 +96,56 @@ func prepareImage(data []byte, path string) (*preparedImage, error) {
 	if orientation >= 5 && orientation <= 8 {
 		width, height = height, width
 	}
+	return &imageProbe{
+		format:      format,
+		orientation: orientation,
+		width:       width,
+		height:      height,
+		warnings:    warnings,
+	}, nil
+}
 
-	img, err := decodeImage(format, data)
+// ProbeImage 只读取格式与方向归一后的尺寸，不解码像素；动图/损坏/超限仍返回错误。
+func ProbeImage(data []byte, path string) (ImageProbe, error) {
+	p, err := probeImage(data, path)
+	if err != nil {
+		return ImageProbe{}, err
+	}
+	return ImageProbe{
+		Format:  p.format,
+		Width:   p.width,
+		Height:  p.height,
+		Warning: strings.Join(p.warnings, "；"),
+	}, nil
+}
+
+// preparedImage 是检查与转换共用的解码结果（方向已归一）。
+type preparedImage struct {
+	format   string
+	width    int
+	height   int
+	img      image.Image
+	warnings []string
+}
+
+func prepareImage(data []byte, path string) (*preparedImage, error) {
+	p, err := probeImage(data, path)
+	if err != nil {
+		return nil, err
+	}
+	img, err := decodeImage(p.format, data)
 	if err != nil {
 		return nil, apperr.Validation("无法解码图片，文件可能已损坏")
 	}
-	if orientation > 1 {
-		img = applyOrientation(img, orientation)
+	if p.orientation > 1 {
+		img = applyOrientation(img, p.orientation)
 	}
 	return &preparedImage{
-		format:   format,
-		width:    width,
-		height:   height,
+		format:   p.format,
+		width:    p.width,
+		height:   p.height,
 		img:      img,
-		warnings: warnings,
+		warnings: p.warnings,
 	}, nil
 }
 

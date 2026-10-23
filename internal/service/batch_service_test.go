@@ -28,7 +28,10 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	svc := &Service{}
 	var progress []BatchProgress
 	result, err := svc.ProcessBatch(
-		BatchRequest{Paths: []string{src}, Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, MaxWidth: 200, MaxHeight: 200},
+		},
 		func(p BatchProgress) { progress = append(progress, p) },
 	)
 	if err != nil {
@@ -68,7 +71,10 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	}
 
 	result2, err := svc.ProcessBatch(
-		BatchRequest{Paths: []string{src}, Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, MaxWidth: 200, MaxHeight: 200},
+		},
 		nil,
 	)
 	if err != nil {
@@ -113,7 +119,7 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Paths: []string{corrupt, valid},
-			Rules: BatchRules{OutputFormat: imageproc.OutputPNG},
+			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG},
 		},
 		nil,
 	)
@@ -141,6 +147,74 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 	}
 }
 
+func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
+	dir := t.TempDir()
+	within := filepath.Join(dir, "within.png")
+	outside := filepath.Join(dir, "outside.png")
+	same := filepath.Join(dir, "same.png")
+	if err := os.WriteFile(within, batchTestPNG(t, 100, 50), 0o644); err != nil {
+		t.Fatalf("写入 within 失败: %v", err)
+	}
+	outsideBytes := batchTestPNG(t, 400, 300)
+	if err := os.WriteFile(outside, outsideBytes, 0o644); err != nil {
+		t.Fatalf("写入 outside 失败: %v", err)
+	}
+	if err := os.WriteFile(same, batchTestPNG(t, 100, 50), 0o644); err != nil {
+		t.Fatalf("写入 same 失败: %v", err)
+	}
+
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{within, outside, same},
+			Rules: BatchRules{OutputFormat: imageproc.OutputKeep, MaxWidth: 200, MaxHeight: 200},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Success != 1 || result.Skipped != 2 || result.Failed != 0 {
+		t.Fatalf("批次统计不对：%+v", result)
+	}
+	if result.Items[0].Status != StatusSkipped || result.Items[0].Message != "已达标" {
+		t.Errorf("within 应跳过：%+v", result.Items[0])
+	}
+	resized := result.Items[1]
+	if resized.Status != StatusSuccess || resized.OutputPath != filepath.Join(dir, "outside-out.png") {
+		t.Errorf("outside 应缩放成功：%+v", resized)
+	}
+	if resized.Width != 200 || resized.Height != 150 {
+		t.Errorf("outside 输出尺寸 = %dx%d，期望 200x150", resized.Width, resized.Height)
+	}
+	if result.Items[2].Status != StatusSkipped {
+		t.Errorf("same 应跳过：%+v", result.Items[2])
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "within-out.png")); !os.IsNotExist(err) {
+		t.Errorf("跳过项不应产出文件")
+	}
+	if _, err := os.Stat(resized.OutputPath); err != nil {
+		t.Errorf("缩放输出不存在: %v", err)
+	}
+	after, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatalf("读取源文件失败: %v", err)
+	}
+	if string(after) != string(outsideBytes) {
+		t.Errorf("源文件被修改")
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取输出目录失败: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".imageworkshop-") {
+			t.Errorf("残留临时文件: %s", entry.Name())
+		}
+	}
+}
+
 func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "ok.png")
 	if err := os.WriteFile(src, batchTestPNG(t, 10, 10), 0o644); err != nil {
@@ -153,6 +227,9 @@ func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 		{OutputFormat: imageproc.OutputPNG, TargetBytes: 1024},
 		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100},
 		{OutputFormat: imageproc.OutputPNG, MaxHeight: 100},
+		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100, MaxHeight: 0},
+		{OutputFormat: imageproc.OutputPNG, MaxWidth: 70000, MaxHeight: 100},
+		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100, MaxHeight: -1},
 	}
 	for _, rules := range cases {
 		_, err := svc.ProcessBatch(BatchRequest{Paths: []string{src}, Rules: rules}, nil)

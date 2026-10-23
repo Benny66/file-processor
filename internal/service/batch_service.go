@@ -17,6 +17,12 @@ import (
 
 const batchWorkerCount = 2
 
+// 尺寸盒宽高范围（单一真相；前端镜像在 frontend/src/lib/image.ts）。
+const (
+	BoxMinDimension = 1
+	BoxMaxDimension = 65535
+)
+
 // BatchRules 是一批图片的处理规则；目标体积与尺寸字段在后续切片实现。
 type BatchRules struct {
 	OutputFormat string `json:"output_format"`
@@ -82,8 +88,16 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	if err := imageproc.ValidateOutputFormat(req.Rules.OutputFormat); err != nil {
 		return BatchResult{}, err
 	}
-	if req.Rules.TargetBytes != 0 || req.Rules.MaxWidth != 0 || req.Rules.MaxHeight != 0 {
-		return BatchResult{}, apperr.Validation("目标体积/尺寸规则尚未支持")
+	if req.Rules.TargetBytes != 0 {
+		return BatchResult{}, apperr.Validation("目标体积规则尚未支持")
+	}
+	if (req.Rules.MaxWidth == 0) != (req.Rules.MaxHeight == 0) {
+		return BatchResult{}, apperr.Validation("宽高需同时设置")
+	}
+	if req.Rules.MaxWidth != 0 &&
+		(req.Rules.MaxWidth < BoxMinDimension || req.Rules.MaxWidth > BoxMaxDimension ||
+			req.Rules.MaxHeight < BoxMinDimension || req.Rules.MaxHeight > BoxMaxDimension) {
+		return BatchResult{}, apperr.Validation("宽高需在 1–65535 px")
 	}
 
 	s.batchMu.Lock()
@@ -128,7 +142,7 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 				if ctx.Err() != nil {
 					return
 				}
-				res := s.convertOne(req.Paths[idx], req.Rules.OutputFormat)
+				res := s.convertOne(req.Paths[idx], req.Rules)
 				results[idx] = res
 				progressMu.Lock()
 				done++
@@ -181,7 +195,7 @@ func (s *Service) CancelBatch() {
 	}
 }
 
-func (s *Service) convertOne(path, outputFormat string) ItemResult {
+func (s *Service) convertOne(path string, rules BatchRules) ItemResult {
 	res := ItemResult{Path: path}
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -208,7 +222,33 @@ func (s *Service) convertOne(path, outputFormat string) ItemResult {
 	}
 	res.SourceBytes = int64(len(data))
 
-	converted, err := imageproc.Convert(data, path, imageproc.ConvertOptions{Format: outputFormat})
+	probe, err := imageproc.ProbeImage(data, path)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Message = err.Error()
+		return res
+	}
+	outFormat, err := imageproc.NormalizeOutputFormat(rules.OutputFormat, probe.Format)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Message = err.Error()
+		return res
+	}
+	boxEnabled := rules.MaxWidth > 0
+	if outFormat == probe.Format &&
+		(!boxEnabled || (probe.Width <= rules.MaxWidth && probe.Height <= rules.MaxHeight)) {
+		res.Status = StatusSkipped
+		res.Message = "已达标"
+		res.Width = probe.Width
+		res.Height = probe.Height
+		return res
+	}
+
+	converted, err := imageproc.Convert(data, path, imageproc.ConvertOptions{
+		Format:    rules.OutputFormat,
+		MaxWidth:  rules.MaxWidth,
+		MaxHeight: rules.MaxHeight,
+	})
 	if err != nil {
 		res.Status = StatusFailed
 		res.Message = err.Error()

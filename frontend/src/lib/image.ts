@@ -24,3 +24,9 @@ export const ItemStatus = {
 
 /** 处理状态取值类型。 */
 export type ItemStatusValue = (typeof ItemStatus)[keyof typeof ItemStatus]
+
+/** 尺寸盒宽高上下界。单一真相在 Go 的 internal/service（BoxMinDimension / BoxMaxDimension）。 */
+export const BoxDimension = {
+  Min: 1,
+  Max: 65535,
+} as const
