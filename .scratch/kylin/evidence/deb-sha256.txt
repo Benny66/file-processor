@@ -1,1 +1,1 @@
-5eca0f45f0e0206c4a743f445b288d82d8966aec84c31931b69fe8378713bbb9  build/bin/ImageWorkshop_0.1.0_amd64.deb
+00aefafcbfdc26a5e074a5c7f8bc37687521b03f59255e8364a42ec7eb774b82  build/bin/ImageWorkshop_0.1.0_amd64.deb

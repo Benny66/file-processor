@@ -37,7 +37,7 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
   - 关闭/托盘：001 已改为运行期判定；Linux 不再硬编码 `webkit2_41`。
 - 验收证据：
   - `make linux-deb` 全链路通过（前端 → 构建镜像 → 容器内 wails build → .deb）。
-  - 产物：`build/bin/ImageWorkshop_0.1.0_amd64.deb`（6.0 MB，SHA256 `5eca0f45f0e0206c4a743f445b288d82d8966aec84c31931b69fe8378713bbb9`）。
+  - 产物：`build/bin/ImageWorkshop_0.1.0_amd64.deb`（6.0 MB，当前 SHA256 `00aefafcbfdc26a5e074a5c7f8bc37687521b03f59255e8364a42ec7eb774b82`）。dpkg 打包时间戳会让每次构建的 .deb 哈希变化；内部二进制 BuildID 稳定为 `6ff734d40997ef3e7629fc5043a1c199041cbe9b`。
   - `dpkg-deb -I`：Package imageworkshop / Version 0.1.0 / Architecture amd64 / Depends 如上述；`-c` 路径与权限正确（`./` 为 0755）。
   - 解包二进制：ELF64 x86-64；NEEDED 覆盖 `libc6`、`libgtk-3-0`、`libwebkit2gtk-4.0-37` 及其传递依赖（映射见 `.scratch/kylin/evidence/deb-needs.txt`）。
   - 在 focal multiarch 容器 `dpkg -i` 安装成功（`install ok installed`），桌面文件与图标触发正常；证据见 `.scratch/kylin/evidence/deb-*.txt`。
@@ -48,3 +48,4 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
   - Windows 构建未在本地复跑；本次改动只触及 Linux 分支与新增脚本，macOS 构建已回归。
   - `StartupWMClass=ImageWorkshop` 与麒麟 UKUI 的实际 WM_CLASS 需真机确认；不稳定时只影响任务栏分组。
   - 安装路径使用 `/usr/bin/ImageWorkshop`（US-35 的英文标识），不是小写 `imageworkshop`。
+  - `make package os=macos` 使用 `build.sh -clean`，会清空 `build/bin` 中的其他平台产物；交付前需先取走 `.deb`（本次已另存 `.scratch/kylin/out/`），或按 `release.sh` 的顺序最后构建 Linux。
