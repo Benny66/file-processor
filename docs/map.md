@@ -28,7 +28,7 @@
 | `internal/logging/` | 日志初始化（文件轮转 + 分级）+ Wails logger 适配器 |
 | `internal/dialog/` | 原生对话框封装 |
 | `internal/reveal/` | 在系统文件管理器中打开目录（跨平台） |
-| `internal/tray/` | 系统托盘（macOS 为 no-op，见其包注释） |
+| `internal/tray/` | 系统托盘：`supported_<goos>.go` 声明本平台是否有托盘（关闭语义的唯一输入），`start_*.go` 是线程实现 |
 | `internal/crash/` | panic 落盘（供业务显式包裹长驻 goroutine） |
 | `internal/apperr/` | **契约**：错误协议（code/message + `Format`） |
 | `internal/page/` | **契约**：分页协议（`Request` / `Result[T]`） |
@@ -62,8 +62,9 @@
 |---|---|
 | `_example/` | 模块生成器模板 + 契约用法范例（**非产品页面**） |
 | `scripts/set-version.sh` | **版本写入唯一实现**（本地发布与 CI 发布共用） |
-| `scripts/app-name.sh` | 从 `wails.json` 读取产物名（打包/冒烟/发布脚本共用） |
-| `scripts/build.sh` | **版本注入唯一入口**：读 `wails.json` 的 `info.productVersion`，同时喂给产物与 `-ldflags` |
+| `scripts/app-name.sh` | 从 `wails.json` 读取产物名（打包/冒烟/发布脚本共用；实际解析在 `wails-info.sh`） |
+| `scripts/wails-info.sh` | **`wails.json` 字段读取唯一入口**（sed 实现，不依赖 python3——CI 的 ubuntu:20.04 容器里没有它） |
+| `scripts/build.sh` | **版本注入唯一入口**：读 `wails.json` 的 `info.productVersion`，同时喂给产物与 `-ldflags`。`wails build` 只允许出现在这里，护栏 `TestWailsBuildHasSingleEntryPoint` 拦别的直调 |
 | `.github/workflows/` | `build.yml`（检查 + 编译矩阵）、`release.yml`（tag 触发自动发布） |
 | `scripts/gen.sh` | 模块生成器（`make gen name=<module>`） |
 | `scripts/verify-gen.sh` | 生成器端到端验证（`make verify-gen`） |

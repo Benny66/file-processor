@@ -35,6 +35,11 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
   - 入口：`scripts/package.sh linux` 改为产出 `.deb`（Linux 原生；macOS/Windows 经 Docker），新增 `make linux-deb`；`scripts/release.sh` 的 Linux 产物改为 `.deb`。
   - CI：`build.yml` 新增 `linux-deb` job（`container: ubuntu:20.04`，WebKitGTK 2.28.1，上传 `linux-deb` artifact）。
   - 关闭/托盘：001 已改为运行期判定；Linux 不再硬编码 `webkit2_41`。
+    - **005→011 累计审查修正**：运行期判定不可达（托盘库注册失败不回传），改为平台声明表；Linux 在 001 真机确认前不启用托盘，关闭即退出。验收标准第 3 条「不会出现窗口消失且无法恢复」由此从「靠运行期发现」变成「编译期就不给隐藏的机会」。
+  - 交付链路修正（同轮审查）：
+    - `scripts/build-linux-container.sh` 原裸调 `wails build`，绕过版本注入 —— `go version -m` 实测旧产物只有 `-ldflags="-w -s"`，`.deb` control 写 0.1.0 而二进制自报 `dev`。现容器内改走 `scripts/build.sh`，提交号由宿主经 `BUILD_COMMIT` 传入；新产物 `go version -m` 可见 `InjectedVersion=0.1.0`、`InjectedCommit`。
+    - `scripts/package-deb.sh` 与 `app-name.sh` 原用 python3 读 `wails.json`，而 CI 的 `container: ubuntu:20.04` **没有 python3**（实测镜像内 `command -v python3` 为空），`set -euo pipefail` 下 127 退出 —— 即 `linux-deb` job 从未推送过，一推必红。现统一到新增的 `scripts/wails-info.sh`（sed 实现，字段缺失即报错），并在 CI 同款镜像内验证六个字段读取通过、重新产出的 `.deb` control 逐项一致。
+    - 新增护栏：`TestWailsBuildHasSingleEntryPoint`（`wails build` 只允许在 `build.sh`；首跑又抓到 `smoke.sh`、`verify-gen.sh` 两处历史旁路，已一并收口）、`TestBuildScriptsDoNotDependOnPython`（构建脚本禁依赖 python3）。
 - 验收证据：
   - `make linux-deb` 全链路通过（前端 → 构建镜像 → 容器内 wails build → .deb）。
   - 产物：`build/bin/ImageWorkshop_0.1.0_amd64.deb`（6.0 MB，当前 SHA256 `00aefafcbfdc26a5e074a5c7f8bc37687521b03f59255e8364a42ec7eb774b82`）。dpkg 打包时间戳会让每次构建的 .deb 哈希变化；内部二进制 BuildID 稳定为 `6ff734d40997ef3e7629fc5043a1c199041cbe9b`。

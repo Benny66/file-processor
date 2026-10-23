@@ -19,8 +19,8 @@ Kylin 是本产品的一等目标，但 Wails 无法从 macOS 交叉编译 Linux
 | appindicator | 回传摘要未出现该包 | 与托盘走 DBus StatusNotifierItem 一致；实际可用性待运行确认 |
 
 **派生决定**
-- 构建：Ubuntu 20.04 容器内 `wails build -platform linux/amd64 -tags nodynamic`（默认 4.0）；前端在宿主构建后随源码带入，容器不装 Node。**Apple Silicon 上必须给容器加 `--platform linux/amd64`**，否则会跑成 arm64 并产出不可执行的二进制（首次构建已踩到，脚本已加架构断言）。
+- 构建：Ubuntu 20.04 容器内构建 linux/amd64，Webkit 走默认 4.0 tag；前端在宿主构建后随源码带入，容器不装 Node。构建必须经 `scripts/build.sh`（版本与提交号注入的唯一入口）——005→011 累计审查发现容器曾裸调 `wails build`，导致 `.deb` 写着 0.1.0 而二进制自报 `dev`，现由护栏 `TestWailsBuildHasSingleEntryPoint` 焊住。
 - `.deb` Depends 最小集合（011/012 复核）：`libc6`、`libgtk-3-0`、`libwebkit2gtk-4.0-37`；不声明 appindicator。
-- 关闭语义：托盘注册失败时关闭必须真退出，不能隐藏；拖拽需显式开启 `DragAndDrop.EnableFileDrop` 并整窗接收。
-- 本机（Apple Silicon）构建：`--platform linux/amd64` 的 QEMU 容器在 apt postinst 与 Go 编译阶段都会段错误，不可用；实际采用**原生 arm64 Ubuntu 20.04 容器 + clang/lld 交叉编译**，并按麒麟版本固定 WebKitGTK 2.28.1。CI 的 x86_64 runner 可直接在 amd64 容器内构建，无需交叉。
+- 关闭语义：托盘能力由**平台编译期声明** `tray.Supported()`（darwin=false、windows=true、linux=false），不是运行期探测——`energye/systray` 在注册失败时不回传任何错误，「等运行期发现」在麒麟上没有实现手段。规则仍是 D-30：**未验证可用即关闭退出**。麒麟真机（001）确认 StatusNotifierWatcher 在位、托盘图标与菜单可用后，把 `internal/tray/supported_linux.go` 改为 true 即可切回「隐藏到托盘」，`app_close_test.go` 的平台表需同步。拖拽需显式开启 `DragAndDrop.EnableFileDrop` 并整窗接收。
+- 本机（Apple Silicon）构建：`--platform linux/amd64` 的 QEMU 容器在 apt postinst 与 Go 编译阶段都会段错误，不可用；实际采用**原生 arm64 Ubuntu 20.04 容器 + clang/lld 交叉编译**，并按麒麟版本固定 WebKitGTK 2.28.1。CI 的 x86_64 runner 可直接在 amd64 容器内构建，无需交叉。（本条曾与上一条「必须加 `--platform linux/amd64`、脚本已加断言」互相矛盾，2026-10-23 累计审查后以本条为准。）
 - **001 仍未完成**：真机启动、原生对话框、拖拽、关闭、托盘与一次真实处理尚未执行，不能把“Ubuntu 20.04 能构建”当成“麒麟上能跑”。

@@ -75,6 +75,7 @@ tail -n 50 ~/.config/ImageWorkshop/app.log
   - 环境诊断由客户在真机执行并回传摘要；结论已写入上表与 ADR-0002。
   - `main.go` 显式开启 `DragAndDrop.EnableFileDrop`；`OnFileDrop` 改为整窗接收（队列非空时页面没有 drop-target 元素，依赖 CSS 落点会让拖拽静默失效）。
   - 关闭行为改为运行期判定：`App.beforeClose` 仅在托盘注册成功且非主动退出时隐藏，否则放行退出；新增 `TrayAvailable` 绑定供自绘标题栏的关闭按钮使用；删除静态 `HideWindowOnClose` 开关。
+    - **005→011 累计审查更正（2026-10-23）**：这条「运行期判定」当时是**做不到的**——`start_darwin.go` 与 `start_other.go` 都恒返回 `nil` error，`trayAlive` 因此恒为真，macOS 上点关闭变成隐藏且无 reopen 通道（正是 US-34 禁止的状态），而 `hideOnCloseRequested` 的单测喂的是手工布尔，测不到这条接线，绿灯照过。现改为**平台编译期声明** `tray.Supported()`（darwin=false / windows=true / linux=false），麒麟真机确认 watcher 在位后把 `supported_linux.go` 翻成 true 即切回「隐藏到托盘」。回归测试从 `startup()` 的产物断言，见 `app_close_test.go` 的 `TestStartupWithoutTrayKeepsCloseAsQuit` 与 `TestTraySupportedPerPlatform`。
   - Ubuntu 20.04 容器构建 linux/amd64 二进制（默认 4.0 tag、`nodynamic`、跳过容器内前端构建），产物与 `ldd` 证据存放于 `.scratch/kylin/`。
 - 验收证据：
   - 客户回传：架构、glibc、WebKit、GTK3、开发包缺失、`XDG_SESSION_TYPE=x11`（见上表）。

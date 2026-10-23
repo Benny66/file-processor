@@ -47,7 +47,9 @@
 | `ScanPaths` | `paths []string, skip []string` | `ScanResult`：`files`（支持扩展名且可访问）+ `rejected`（不支持/不可访问/重复及原因）。`skip` 是队列已有绝对路径；不解码，保证导入快。 |
 | `InspectImage` | `path string` | `ImageInfo`：内容探测格式、方向归一后的宽高、字节数、缩略图 base64、扩展名不一致 warning。动图/损坏/超限返回可读错误。 |
 | `RenderPreview` | `path string, maxEdge int` | `Preview`：base64 data URL、宽高、是否含透明。用于单张对比。 |
-| `ProcessBatch` | `BatchRequest` | 阻塞至批次结束并返回 `BatchResult`；期间发 `image:progress`，结束发 `image:done`。 |
+| `ProcessBatch` | `BatchRequest` | 阻塞至批次结束并返回 `BatchResult`（**结果的唯一投递路径**）；期间发 `image:progress`，载荷含 `done`/`total`、`started`（刚被 worker 领取的项，US-14 的「处理中」来源）与 `current`（刚完成项的结果）。 |
+| `ValidateImageRules` | `BatchRules` | 「开始处理」前的预检：合法返回空串，否则返回可直接展示的中文原因（US-11）。范围与「至少一条规则」的判定只在 Go 写一份，前端不再复制逻辑与文案。 |
+| `SupportedFormatHints` | — | 可导入格式的展示清单，由 `imageproc.supportedFormats` 投影，前端不手写清单。 |
 | `CancelBatch` | — | 设置取消标记；在当前文件完成后生效。 |
 | `ListPresets` | `page.Request` | `page.Result[model.ImagePreset]`（列表契约）。 |
 | `SavePreset` / `DeletePreset` | 预设 / id | 预设 CRUD；名称唯一。 |
@@ -90,7 +92,7 @@ type BatchResult struct {
 }
 ```
 
-事件沿用 `internal/event` 的动作常量与 `<domain>:<action>`，域为 `image`：`image:progress` 载荷含 `done`/`total`/当前项，`image:done` 载荷为带 `ok` 的批次结果。前端用 `eventName('image', ...)` 与 `useEvent`，不手写事件名。`OutputFormat` 的 Go 常量是单一真相，前端镜像由 `internal/guard/parity_test.go` 校验。
+事件沿用 `internal/event` 的动作常量与 `<domain>:<action>`，域为 `image`：`image:progress` 载荷含 `done`/`total`、`started`（处理中）与 `current`（完成项结果）。**批次结果不再另发 `image:done`**——`ProcessBatch` 是阻塞调用并返回完整 `BatchResult`，再发一次就是同一结果两条投递路径，前端只会订其中一条，另一条静默空转（005→011 累计审查的实际发现：`image:done` 发射了，全库无人订阅）。现由护栏 `TestEmittedEventsHaveSubscribers` 双向核对「Go 发射 ↔ 前端订阅」，只发不收即红。前端用 `eventName('image', ...)` 与 `useEvent`，不手写事件名。`OutputFormat` 与 `ItemStatus`（含 `processing`）的 Go 常量是单一真相，前端镜像由 `internal/guard/parity_test.go` 校验。
 
 ## 3. 用户故事
 
