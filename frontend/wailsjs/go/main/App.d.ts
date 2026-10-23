@@ -49,3 +49,5 @@ export function SelectFiles(arg1:string):Promise<Array<string>>;
 export function SelectSaveFile(arg1:string,arg2:string):Promise<string>;
 
 export function SetTheme(arg1:string):Promise<void>;
+
+export function TrayAvailable():Promise<boolean>;

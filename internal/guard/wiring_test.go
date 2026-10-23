@@ -34,6 +34,10 @@ var requiredWailsOptions = []struct {
 		field:  "Logger",
 		reason: "不设置它，前端日志与 Wails 内部错误只写 stdout（打包后无人可见），日志会静默丢失",
 	},
+	{
+		field:  "DragAndDrop",
+		reason: "不设置 EnableFileDrop，OnFileDrop 静默收不到任何拖拽事件（导入能力整条断掉且无症状）",
+	},
 }
 
 // TestWailsOptionsAreWired 断言 main.go 里创建窗口的 options.App 字面量设置了必需字段。

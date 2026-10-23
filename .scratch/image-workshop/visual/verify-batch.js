@@ -81,6 +81,7 @@ window.go = { main: { App: {
     return { ok: failed === 0, message: failed ? '批次完成，部分文件失败' : '', items, success, failed, skipped: 0, canceled: 0, saved_bytes: saved };
   },
   CancelBatch: async () => {},
+  TrayAvailable: async () => true,
   GetAppInfo: async () => ({ version: '0.1.0', commit: '', platform: 'darwin/arm64', data_dir: '/tmp', log_file: '/tmp/app.log' }),
   GetDataDir: async () => '/tmp',
   OpenDataDir: async () => {},
@@ -101,6 +102,7 @@ window.runtime = {
   WindowToggleMaximise: () => {},
   WindowIsMaximised: async () => false,
   WindowHide: () => {},
+  Quit: () => {},
   EventsOn: (name, cb) => {
     (eventHandlers[name] = eventHandlers[name] || []).push(cb);
     return () => { eventHandlers[name] = (eventHandlers[name] || []).filter((x) => x !== cb); };

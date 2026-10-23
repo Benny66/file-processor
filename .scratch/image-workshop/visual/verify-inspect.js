@@ -9,6 +9,7 @@ function svgThumb(fill, transparent) {
 }
 window.go = { main: { App: {
   GetTheme: async () => 'dark',
+  TrayAvailable: async () => true,
   SetTheme: async () => {},
   ScanPaths: async () => ({
     files: [
@@ -57,6 +58,7 @@ window.runtime = {
   WindowToggleMaximise: () => {},
   WindowIsMaximised: async () => false,
   WindowHide: () => {},
+  Quit: () => {},
   EventsOn: () => () => {}
 };
 `

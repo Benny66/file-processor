@@ -30,6 +30,11 @@ type App struct {
 	svc      *service.Service
 	cfg      *config.Config
 	trayStop func()
+
+	// trayAlive 表示系统托盘是否真的注册成功（麒麟等环境可能没有 StatusNotifierWatcher）。
+	// quitting 表示本次关闭来自托盘退出等主动退出路径，不应再被「关到托盘」拦截。
+	trayAlive bool
+	quitting  bool
 }
 
 // NewApp 创建应用实例，注入服务聚合与配置（由 main.go 完成组合根组装）。
@@ -51,6 +56,7 @@ func (a *App) startup(ctx context.Context) {
 			runtime.WindowUnminimise(a.ctx)
 		},
 		OnQuit: func() {
+			a.quitting = true
 			runtime.Quit(a.ctx)
 		},
 	})
@@ -58,7 +64,23 @@ func (a *App) startup(ctx context.Context) {
 		slog.Error("启动托盘失败", "err", err)
 	} else {
 		a.trayStop = stop
+		a.trayAlive = true
 	}
+}
+
+// hideOnCloseRequested 决定「关闭窗口」是否应隐藏到托盘。
+// 托盘不可用时必须真退出：否则窗口隐藏后没有任何入口能找回应用（001 验收）。
+func (a *App) hideOnCloseRequested() bool {
+	return a.trayAlive && !a.quitting
+}
+
+// beforeClose 是 Wails 的 OnBeforeClose：能藏到托盘就藏，否则放行真退出。
+func (a *App) beforeClose(ctx context.Context) bool {
+	if !a.hideOnCloseRequested() {
+		return false
+	}
+	runtime.WindowHide(ctx)
+	return true
 }
 
 // shutdown 在应用关闭前调用，按顺序回收资源。
@@ -200,6 +222,12 @@ func (a *App) GetImageSettings() (service.BatchRules, error) {
 // SaveImageSettings 持久化上次使用的图片处理参数。
 func (a *App) SaveImageSettings(rules service.BatchRules) error {
 	return a.svc.SaveImageSettings(rules)
+}
+
+// TrayAvailable 告诉前端当前是否能把窗口隐藏到托盘。
+// 标题栏的关闭按钮据此在「隐藏」与「退出」之间选择（托盘不可用时隐藏等于丢窗口）。
+func (a *App) TrayAvailable() bool {
+	return a.trayAlive
 }
 
 // ---------------------------------------------------------------------------

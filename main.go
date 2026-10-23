@@ -130,6 +130,8 @@ func main() {
 		// 无边框按平台分叉：Windows/Linux 自绘标题栏（三按钮），macOS 用原生交通灯。
 		// macOS 必须 false，否则 Wails 跳过 NSWindowStyleMaskTitled，交通灯消失（见 design D3）。
 		Frameless: frameless(),
+		// 拖拽导入必须显式开启：不设置时 OnFileDrop 静默不收任何事件（001 接线修正）。
+		DragAndDrop: &options.DragAndDrop{EnableFileDrop: true},
 		// 单实例锁：二次启动唤起已有窗口。
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "ImageWorkshop-single-instance",
@@ -142,9 +144,10 @@ func main() {
 				app.notifySecondInstance(data.Args, data.WorkingDirectory)
 			},
 		},
-		// 关闭 = 隐藏到托盘（Windows/Linux）；macOS 无托盘，关闭即退出。
-		// 值由平台决定，见 hideWindowOnClose()。
-		HideWindowOnClose: hideWindowOnClose(),
+		// 关闭语义在运行期决定：托盘可用时隐藏到托盘，否则真退出（见 App.beforeClose）。
+		// 不能用 HideWindowOnClose 静态开启——麒麟等环境可能根本没有托盘。
+		HideWindowOnClose: false,
+		OnBeforeClose:     app.beforeClose,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},

@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { onMounted, ref } from 'vue'
+import { TrayAvailable } from '../../wailsjs/go/main/App'
 
 // 标题栏：
 //  - 拖拽用 Wails 自定义属性 --wails-draggable: drag（非 Electron 的 -webkit-app-region）。
@@ -33,8 +34,15 @@ async function toggleMaximise() {
 }
 async function close() {
   const rt = await getRuntime()
-  // 关闭按钮默认隐藏窗口（配合 HideWindowOnClose 实现"关到托盘"语义）
-  rt.WindowHide()
+  // 托盘可用才隐藏到托盘；否则隐藏等于把窗口丢给用户找不回来（麒麟可能没有托盘）。
+  let canHide = true
+  try {
+    canHide = await TrayAvailable()
+  } catch {
+    // 非 wails 环境（纯 vite dev）没有该绑定，保持旧的隐藏行为。
+  }
+  if (canHide) rt.WindowHide()
+  else rt.Quit()
 }
 
 onMounted(async () => {

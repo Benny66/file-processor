@@ -96,6 +96,7 @@ window.go = { main: { App: {
     return { ok: true, message: '', items, success: items.length, failed: 0, skipped: 0, canceled: 0, extreme_degraded: 0, saved_bytes: saved };
   },
   CancelBatch: async () => {},
+  TrayAvailable: async () => true,
   ListPresets: async (req) => {
     const page = Math.max(1, req?.page || 1);
     const size = Math.max(1, Math.min(200, req?.page_size || 20));
@@ -173,6 +174,7 @@ window.runtime = {
   WindowToggleMaximise: () => {},
   WindowIsMaximised: async () => false,
   WindowHide: () => {},
+  Quit: () => {},
   EventsOn: (name, cb) => {
     (eventHandlers[name] = eventHandlers[name] || []).push(cb);
     return () => { eventHandlers[name] = (eventHandlers[name] || []).filter((x) => x !== cb); };

@@ -730,9 +730,11 @@ onMounted(async () => {
   try {
     const rt = await import('../../../wailsjs/runtime/runtime')
     if (typeof rt.OnFileDrop !== 'function' || disposed) return
+    // 第二个参数为 false：整窗接收拖拽。队列非空时 dropzone 不渲染，
+    // 若要求 CSS drop-target 会导致有队列时拖拽静默失效。
     rt.OnFileDrop((_x, _y, paths) => {
       void importPaths(paths)
-    }, true)
+    }, false)
     unregisterDrop = () => rt.OnFileDropOff()
   } catch {
     // 非 Wails 环境没有文件拖拽能力，按钮仍可通过绑定工作。

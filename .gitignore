@@ -33,3 +33,7 @@ Thumbs.db
 # ---- 补丁/合并残留 ----
 *.orig
 *.rej
+
+# ---- Kylin spike 产物 ----
+# Linux 冒烟二进制体积大，走 U 盘交付，不入库
+/.scratch/kylin/out/
