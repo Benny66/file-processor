@@ -42,6 +42,10 @@ export function ProcessBatch(arg1) {
   return window['go']['main']['App']['ProcessBatch'](arg1);
 }
 
+export function RenderPreview(arg1, arg2) {
+  return window['go']['main']['App']['RenderPreview'](arg1, arg2);
+}
+
 export function ScanPaths(arg1, arg2) {
   return window['go']['main']['App']['ScanPaths'](arg1, arg2);
 }

@@ -1,7 +1,7 @@
 <template>
   <li ref="root" class="row">
     <div
-      class="thumb"
+      class="thumb checkerboard"
       :class="{ 'thumb--failed': hasFailure, 'thumb--pending': !item.info && !hasFailure }"
     >
       <img v-if="item.info" :src="item.info.thumbnail" alt="" />
@@ -30,7 +30,17 @@
       <span v-if="outputSize" class="row__output">→ {{ outputSize }}</span>
     </div>
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
+    <span v-if="item.result && stale" class="row__stale">结果已过期</span>
     <span v-if="item.result?.extreme_degraded" class="row__extreme">已明显降质</span>
+    <button
+      v-if="canCompare"
+      class="row__compare"
+      type="button"
+      :disabled="busy"
+      @click="emit('compare', item.path)"
+    >
+      对比
+    </button>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
     </button>
@@ -43,10 +53,11 @@ import { ItemStatus } from '../../lib/image'
 import { formatBytes } from './format'
 import type { QueueItem } from './types'
 
-const props = defineProps<{ item: QueueItem; busy: boolean }>()
+const props = defineProps<{ item: QueueItem; busy: boolean; stale: boolean }>()
 const emit = defineEmits<{
   (e: 'inspect', path: string): void
   (e: 'remove', path: string): void
+  (e: 'compare', path: string): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -131,6 +142,11 @@ const outputSize = computed(() => {
   return formatBytes(result.output_bytes)
 })
 
+const canCompare = computed(
+  () =>
+    props.item.result?.status === ItemStatus.Success && !!props.item.result.output_path,
+)
+
 function formatLabel(format: string): string {
   return format.toUpperCase()
 }
@@ -179,14 +195,6 @@ onUnmounted(() => {
   overflow: hidden;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  background-color: var(--bg-raised);
-  background-image:
-    linear-gradient(45deg, var(--border-subtle) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--border-subtle) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, var(--border-subtle) 75%),
-    linear-gradient(-45deg, transparent 75%, var(--border-subtle) 75%);
-  background-size: 8px 8px;
-  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
 }
 
 .thumb img {
@@ -330,7 +338,8 @@ onUnmounted(() => {
   color: var(--text-3);
 }
 
-.row__extreme {
+.row__extreme,
+.row__stale {
   flex: none;
   padding: 2px var(--space-2);
   border-radius: var(--radius-full);
@@ -340,8 +349,41 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.row__stale {
+  color: var(--text-3);
+}
+
 .row__status--busy {
   color: var(--text-2);
+}
+
+.row__compare {
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.row__compare:hover:not(:disabled) {
+  border-color: var(--color-primary-border);
+  color: var(--color-primary);
+}
+
+.row__compare:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row__compare:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .row__remove {

@@ -1,10 +1,16 @@
-import type { InspectImage, ProcessBatch, ScanPaths } from '../../../wailsjs/go/main/App'
+import type {
+  InspectImage,
+  ProcessBatch,
+  RenderPreview,
+  ScanPaths,
+} from '../../../wailsjs/go/main/App'
 
 export type ScanResult = Awaited<ReturnType<typeof ScanPaths>>
 export type ScannedFile = ScanResult['files'][number]
 export type ImageInfo = Awaited<ReturnType<typeof InspectImage>>
 export type BatchResult = Awaited<ReturnType<typeof ProcessBatch>>
 export type ItemResult = BatchResult['items'][number]
+export type Preview = Awaited<ReturnType<typeof RenderPreview>>
 
 export interface ImageProgress {
   done: number

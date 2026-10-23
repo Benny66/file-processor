@@ -29,6 +29,22 @@ a {
   text-decoration: none;
 }
 
+/* 透明区域棋盘格：缩略图与对比预览共用，尺寸由 --checker-size 控制 */
+.checkerboard {
+  background-color: var(--bg-raised);
+  background-image:
+    linear-gradient(45deg, var(--border-subtle) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--border-subtle) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--border-subtle) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--border-subtle) 75%);
+  background-size: var(--checker-size, 8px) var(--checker-size, 8px);
+  background-position:
+    0 0,
+    0 calc(var(--checker-size, 8px) / 2),
+    calc(var(--checker-size, 8px) / 2) calc(var(--checker-size, 8px) / -2),
+    calc(var(--checker-size, 8px) / -2) 0;
+}
+
 /* 滚动条：贴合主题 */
 ::-webkit-scrollbar {
   width: 10px;

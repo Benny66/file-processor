@@ -24,6 +24,8 @@ export function OpenDataDir():Promise<void>;
 
 export function ProcessBatch(arg1:service.BatchRequest):Promise<service.BatchResult>;
 
+export function RenderPreview(arg1:string,arg2:number):Promise<imageproc.Preview>;
+
 export function ScanPaths(arg1:Array<string>,arg2:Array<string>):Promise<service.ScanResult>;
 
 export function SelectDirectory(arg1:string):Promise<string>;

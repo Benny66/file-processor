@@ -294,3 +294,33 @@ func TestInspectImageMissingFile(t *testing.T) {
 		t.Fatalf("期望 not_found 错误，实际：%v", err)
 	}
 }
+
+func TestRenderPreviewMissingFile(t *testing.T) {
+	svc := &Service{}
+	_, err := svc.RenderPreview(filepath.Join(t.TempDir(), "missing.png"), 100)
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeNotFound {
+		t.Fatalf("期望 not_found 错误，实际：%v", err)
+	}
+}
+
+func TestRenderPreviewReadsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "preview.png")
+	img := image.NewNRGBA(image.Rect(0, 0, 20, 10))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png encode: %v", err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("写入图片失败: %v", err)
+	}
+
+	svc := &Service{}
+	preview, err := svc.RenderPreview(path, 100)
+	if err != nil {
+		t.Fatalf("RenderPreview 失败: %v", err)
+	}
+	if preview.Width != 20 || preview.Height != 10 || preview.DataURL == "" {
+		t.Errorf("预览结果不对：%+v", preview)
+	}
+}

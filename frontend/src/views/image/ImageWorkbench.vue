@@ -141,6 +141,9 @@
       [{{ actionError.code }}] {{ actionError.message }}
     </p>
 
+    <div v-if="resultsStale" class="notice notice--stale" role="status">
+      <span class="notice__text">参数或队列已变化，已有结果标记为过期；重新开始处理可更新。</span>
+    </div>
     <div v-if="importNote" class="notice" role="status" :title="importNote.detail">
       <span class="notice__text">{{ importNote.text }}</span>
       <button class="notice__close" type="button" aria-label="关闭导入提示" @click="dismissNote">
@@ -166,15 +169,19 @@
         :key="item.path"
         :item="item"
         :busy="busy"
+        :stale="resultsStale"
         @inspect="requestInspect"
         @remove="removeItem"
+        @compare="openCompare"
       />
     </ul>
+
+    <CompareDialog :open="compareOpen" :item="compareItem" @close="closeCompare" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   CancelBatch,
   InspectImage,
@@ -189,6 +196,7 @@ import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
 import { BoxDimension, OutputFormat, TargetBytes, type OutputFormatValue } from '../../lib/image'
 import { logError, logInfo, logWarn } from '../../lib/log'
+import CompareDialog from './CompareDialog.vue'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
 import type { BatchResult, ImageProgress, ItemResult, QueueItem, ScanResult } from './types'
@@ -216,6 +224,9 @@ const maxHeight = ref(1080)
 const targetEnabled = ref(false)
 const targetValue = ref(500)
 const targetUnit = ref<'KB' | 'MB'>('KB')
+const resultsStale = ref(false)
+const compareOpen = ref(false)
+const compareItem = ref<QueueItem | null>(null)
 
 const busy = computed(() => importing.value || processing.value)
 const sizeBoxValid = computed(() => {
@@ -273,6 +284,26 @@ function currentQueuePaths(): string[] {
 function applyItemResult(result: ItemResult) {
   const item = items.value.find((entry) => entry.path === result.path)
   if (item) item.result = result
+}
+
+function markResultsStale() {
+  if (items.value.some((item) => item.result)) resultsStale.value = true
+}
+
+watch(
+  [outputFormat, sizeBoxEnabled, maxWidth, maxHeight, targetEnabled, targetValue, targetUnit],
+  markResultsStale,
+)
+
+function openCompare(path: string) {
+  const item = items.value.find((entry) => entry.path === path)
+  if (!item) return
+  compareItem.value = item
+  compareOpen.value = true
+}
+
+function closeCompare() {
+  compareOpen.value = false
 }
 
 useEvent<ImageProgress>(eventName('image', EventAction.Progress), (progress) => {
@@ -353,6 +384,7 @@ async function importPaths(paths: string[]) {
     }))
     if (added.length > 0) {
       items.value = items.value.concat(added)
+      markResultsStale()
     }
     importNote.value = scanNote(result, added.length)
     logInfo('图片导入完成', {
@@ -386,6 +418,7 @@ function applyBatchResult(result: BatchResult) {
   for (const item of result.items) applyItemResult(item)
   processed.value = result.items.length
   total.value = result.items.length
+  resultsStale.value = false
   batchSummary.value = summaryText(result)
   logInfo('批量处理完成', {
     success: result.success,
@@ -406,6 +439,7 @@ async function startBatch() {
   actionError.value = null
   importNote.value = null
   for (const item of items.value) item.result = null
+  resultsStale.value = false
   try {
     const request = new service.BatchRequest({
       paths: batchPaths,
@@ -495,6 +529,7 @@ async function addFolder() {
 function removeItem(path: string) {
   if (busy.value) return
   items.value = items.value.filter((item) => item.path !== path)
+  markResultsStale()
 }
 
 function dismissNote() {
@@ -510,6 +545,7 @@ function clearQueue() {
   batchSummary.value = null
   processed.value = 0
   total.value = 0
+  resultsStale.value = false
   actionError.value = null
 }
 
@@ -783,6 +819,10 @@ onUnmounted(() => {
   background: var(--bg-raised);
   color: var(--text-2);
   font-size: var(--font-size-sm);
+}
+
+.notice--stale {
+  border-color: var(--color-warning);
 }
 
 .notice__text {

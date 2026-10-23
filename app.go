@@ -144,6 +144,11 @@ func (a *App) InspectImage(path string) (imageproc.Info, error) {
 	return a.svc.InspectImage(path)
 }
 
+// RenderPreview 生成单张对比用的预览图（base64 data URL，透明图保留 alpha）。
+func (a *App) RenderPreview(path string, maxEdge int) (imageproc.Preview, error) {
+	return a.svc.RenderPreview(path, maxEdge)
+}
+
 // ProcessBatch 转换一批图片，期间推送进度事件，结束后推送完成事件。
 func (a *App) ProcessBatch(req service.BatchRequest) (service.BatchResult, error) {
 	result, err := a.svc.ProcessBatch(req, func(p service.BatchProgress) {

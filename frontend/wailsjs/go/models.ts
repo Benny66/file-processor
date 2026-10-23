@@ -49,6 +49,24 @@ export namespace imageproc {
 	        this.warning = source["warning"];
 	    }
 	}
+	export class Preview {
+	    data_url: string;
+	    width: number;
+	    height: number;
+	    has_alpha: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new Preview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.data_url = source["data_url"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.has_alpha = source["has_alpha"];
+	    }
+	}
 
 }
 
