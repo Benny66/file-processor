@@ -47,7 +47,22 @@
 
 ## 完成记录
 
-- 状态：待开始
-- 实现说明：
+- 状态：进行中（README 已产品化并配真实构建截图；其余交付文档与发布基线待开始）
+- 已完成（2026-10-23，README 专项）：
+  - `README.md` 重写为产品文档：定位 + 英文摘要 + 三平台安装包表 + 能力/边界表 + 界面截图（带说明）
+    + 使用与构建 + 工程约束 + 已知限制；脚手架内容收进底部「附：工程基座」。
+  - 截图来自**当前构建的前端**（`frontend/dist` + Playwright headless，队列为示例数据，README 内已标注）：
+    `docs/images/工作台-批量处理.gif`（处理中状态机）、`工作台-处理结果.png`、`单张对比.png`、`预设管理.png`、
+    `设置页面.png`（替换脚手架时期旧图）。拍摄脚本：`.scratch/image-workshop/visual/capture-readme-shots.js`。
+  - 删除 `docs/images/仪表盘.png`：该页面已被 US-38 移除，留着会误导（恢复：`git checkout <旧提交> -- docs/images/仪表盘.png`）。
+  - 事实核对：macOS 最低版本按 `build/darwin/Info.plist` 写 10.13（不是 11+）；签名状态写「ad-hoc 自签」；
+    未写「Element Plus 组件」——它在 `deps.yaml` 里登记为基座组件库，但产品页面用的是自绘组件 + tokens。
+- 待办新增（README 拍摄时发现，属交付/健壮性范围）：
+  - **弹窗渲染抛错会把整页锁死**：`useModalFocus` 打开时给 `#app` 加 `inert`，若弹窗子树在渲染中抛错
+    （例：预设字段形状与 `model.ImagePreset` 不符，`preset.output_format.toUpperCase()` 抛 TypeError），
+    `inert` 不会随关闭移除，此后整个应用点不动、且没有任何提示。本次是替身数据形状不对触发的，
+    但真实触发条件就是「前后端契约漂移」——正是本仓最怕的无症状失效类别。
+    建议：给对话框渲染加兜底（字段缺失时显示占位而非抛错），并补一条护栏/测试断言
+    「弹窗关闭后 `#app` 不得残留 inert」。归入本票或 012 走查后单独修。
 - 验收证据：
 - 偏离与遗留：
