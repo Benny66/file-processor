@@ -434,11 +434,15 @@ func findWailsAppLiteral(f *ast.File) *ast.CompositeLit {
 // ---------------------------------------------------------------------------
 // 护栏 12：构建/打包脚本不得依赖 python3
 //
-// 背景（005→011 累计审查抓到的真实缺陷）：package-deb.sh 与 app-name.sh 用 python3
-// 解析 wails.json。本地 macOS 装了 python3 所以一切正常，而 CI 的 linux-deb job 跑在
-// `container: ubuntu:20.04`——该镜像【没有 python3】（实测 command -v python3 为空），
-// 于是 `set -euo pipefail` 下解释器缺失直接 127 退出，job 必红。
-// 这类「只在 CI 环境暴露的依赖」不报错、不崩溃，只在推送后变红，故编译成会红的检查。
+// 背景（005→011 累计审查）：package-deb.sh 与 app-name.sh 用 python3 解析
+// wails.json，而 CI 的 linux-deb job 跑在 `container: ubuntu:20.04`——**该镜像
+// 本身没有 python3**（实测 `command -v python3` 为空）。它能跑起来，只是因为 job
+// 里 `apt-get install libgtk-3-dev …` 把 python3 当**传递依赖**顺带装了
+// （模拟安装同一份清单可见 `Inst python3`）。
+//
+// 也就是说：打包链的前提是一个【没人声明、且会随 apt 清单消失】的解释器。
+// 审查时我把它判成「job 一推必红」，这是错的——推送后 b7d1eb2 的 linux-deb 实测
+// success，原因如上。护栏仍然成立，只是理由是「不靠巧合」而不是「当下就坏」。
 //
 // 读 wails.json 请走 scripts/wails-info.sh（sed 实现，无解释器依赖）。
 // 铁律：解析到 0 个脚本必须报错（护栏感知自己瞎了）。
@@ -479,7 +483,8 @@ func TestBuildScriptsDoNotDependOnPython(t *testing.T) {
 				continue // 注释里讲历史原因会提到 python3，不是依赖
 			}
 			if pythonRe.MatchString(line) {
-				t.Errorf("%s:%d 依赖 python3 —— CI 的 ubuntu:20.04 容器里没有它，该 job 会 127 退出。\n"+
+				t.Errorf("%s:%d 依赖 python3 —— ubuntu:20.04 镜像本身没有它，CI 里它只是 apt 的传递依赖，"+
+					"打包链不该把没声明的解释器当前提。\n"+
 					"读 wails.json 请改用 bash scripts/wails-info.sh <key>\n\t%s",
 					rel, i+1, trimmed)
 			}

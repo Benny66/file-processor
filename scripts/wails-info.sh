@@ -6,10 +6,12 @@
 #   1. 单一真相。wails.json 的字段此前被 4 处各自解析（build.sh 用 sed、
 #      app-name.sh 与 package-deb.sh 用 python3），同一份配置多套解析逻辑，
 #      改一个字段名就会有一处静默读到空值。
-#   2. CI 可用性。linux-deb job 跑在 `container: ubuntu:20.04` 里，该镜像【没有
-#      python3】（实测 `docker run --rm ubuntu:20.04 command -v python3` 为空）。
-#      原先 package-deb.sh 的 python3 解析在 set -euo pipefail 下直接 127 退出，
-#      本地能过只因为 macOS 宿主装了 python3——CI 是必红的。
+#   2. 依赖不得靠巧合。CI 的 linux-deb job 跑在 `container: ubuntu:20.04`，
+#      该镜像【本身没有 python3】——它能跑起来只是因为 job 里那条
+#      `apt-get install libgtk-3-dev …` 把 python3 作为**传递依赖**顺带装了
+#      （2026-10-23 实测：基础镜像 `command -v python3` 为空，模拟安装同一份清单
+#      出现 `Inst python3`）。也就是说：一个没人声明、也随时会随 apt 清单变化而
+#      消失的解释器，被当成了打包链的前提。
 #
 # 用法：bash scripts/wails-info.sh <key>
 #   key ∈ outputfilename | info.productVersion | info.productName |

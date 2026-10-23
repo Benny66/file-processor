@@ -35,6 +35,7 @@
   - 只读挂载 dmg：包含 `ImageWorkshop.app` 与 `Applications` 软链；Info.plist 版本 0.1.0，bundle id 为占位 `com.example.imageworkshop`（发布前需替换，D-32）。
   - 从挂载卷启动 `.app`：进程存活；app.log 显示版本 0.1.0、日志/数据库/配置初始化、前端挂载 146ms；macOS 按设计跳过托盘；数据目录生成 `ImageWorkshop.db`、`config.json`、`app.log`。证据：`.scratch/kylin/evidence/macos-startup-log.txt`、`macos-dmg-sha256.txt`。
   - `make test` / `make lint` / `make build` 通过。
+  - CI 三平台构建已真跑并全绿（2026-10-23，run 39967974817 / `ef6cea4`：`check`、`linux-deb`、`build (macos-latest)`、`build (windows-latest)` success）。这只满足本票「CI 三平台构建」一项，**不等于**任一平台的真机安装/操作验收。
   - 未完成：完整 UI 走查（六种输入格式、目标体积、宽高盒、对比、预设、重启恢复、源文件不变、无网络请求）；Windows 安装/启动（本机无 Windows 真机/VM，且未安装 NSIS）；麒麟 `.deb` 安装与处理。
 - 偏离与遗留：
   - dmg 无 Finder 美化（本会话无 GUI/Finder 自动化权限），但不影响挂载与安装；`STRICT_POLISH` 未开启。

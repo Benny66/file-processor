@@ -38,7 +38,7 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
     - **005→011 累计审查修正**：运行期判定不可达（托盘库注册失败不回传），改为平台声明表；Linux 在 001 真机确认前不启用托盘，关闭即退出。验收标准第 3 条「不会出现窗口消失且无法恢复」由此从「靠运行期发现」变成「编译期就不给隐藏的机会」。
   - 交付链路修正（同轮审查）：
     - `scripts/build-linux-container.sh` 原裸调 `wails build`，绕过版本注入 —— `go version -m` 实测旧产物只有 `-ldflags="-w -s"`，`.deb` control 写 0.1.0 而二进制自报 `dev`。现容器内改走 `scripts/build.sh`，提交号由宿主经 `BUILD_COMMIT` 传入；新产物 `go version -m` 可见 `InjectedVersion=0.1.0`、`InjectedCommit`。
-    - `scripts/package-deb.sh` 与 `app-name.sh` 原用 python3 读 `wails.json`，而 CI 的 `container: ubuntu:20.04` **没有 python3**（实测镜像内 `command -v python3` 为空），`set -euo pipefail` 下 127 退出 —— 即 `linux-deb` job 从未推送过，一推必红。现统一到新增的 `scripts/wails-info.sh`（sed 实现，字段缺失即报错），并在 CI 同款镜像内验证六个字段读取通过、重新产出的 `.deb` control 逐项一致。
+    - `scripts/package-deb.sh` 与 `app-name.sh` 原用 python3 读 `wails.json`，而 `ubuntu:20.04` 镜像【本身没有 python3】——它能跑起来只是因为 job 里 `apt-get install libgtk-3-dev …` 把 python3 当传递依赖顺带装了（模拟安装可见 `Inst python3`）。**审查时我据此判「job 一推必红」是错的**：推送后 `b7d1eb2` 与 `ef6cea4` 的 `linux-deb` 都实测 success。改用新增的 `scripts/wails-info.sh`（sed 实现、字段缺失即报错）依然值得做，但理由是「打包链不该依赖没声明的解释器」，不是「当下就坏」。在 CI 同款镜像内验证六个字段读取通过，重新产出的 `.deb` control 逐项一致。
     - 新增护栏：`TestWailsBuildHasSingleEntryPoint`（`wails build` 只允许在 `build.sh`；首跑又抓到 `smoke.sh`、`verify-gen.sh` 两处历史旁路，已一并收口）、`TestBuildScriptsDoNotDependOnPython`（构建脚本禁依赖 python3）。
 - 验收证据：
   - `make linux-deb` 全链路通过（前端 → 构建镜像 → 容器内 wails build → .deb）。
@@ -48,7 +48,7 @@ CI 产出可安装到银河麒麟 V10 SP1 的 `.deb` 安装包；应用能启动
   - 在 focal multiarch 容器 `dpkg -i` 安装成功（`install ok installed`），桌面文件与图标触发正常；证据见 `.scratch/kylin/evidence/deb-*.txt`。
   - `make test` / `make lint` / `make build`（macOS）通过。
 - 偏离与遗留：
-  - **未在麒麟真机安装/启动**，也未执行 CI（未推送）；011 不能标记完成。
+  - CI 已真跑并全绿（2026-10-23，run 39967974817 / `ef6cea4`）：`check`、`linux-deb`、`build (macos-latest)`、`build (windows-latest)` 均 success，`.deb` 作为 `linux-deb` artifact 上传。**仍未在麒麟真机安装/启动**——CI 绿只证明能在 focal 里构建打包，不证明麒麟上跑得起来（ADR-0002 的口径）；011 不能标记完成。
   - `release.yml` 的 tag 发布仍只有 macOS/Windows 两条腿，Linux `.deb` 目前只在 `build.yml` 上传 artifact；接入 Release 留给 013。
   - Windows 构建未在本地复跑；本次改动只触及 Linux 分支与新增脚本，macOS 构建已回归。
   - `StartupWMClass=ImageWorkshop` 与麒麟 UKUI 的实际 WM_CLASS 需真机确认；不稳定时只影响任务栏分组。
