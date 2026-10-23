@@ -39,6 +39,13 @@ type Config struct {
 	// 尺寸字段仍保留（还原后回到该尺寸）。
 	WindowMaximised bool `json:"window_maximised"`
 
+	// 上次使用的图片处理参数。0 表示关闭；空 OutputFormat 表示保持原格式
+	// （旧配置没有这些字段，读取方按默认语义处理）。
+	ImageOutputFormat string `json:"image_output_format"`
+	ImageTargetBytes  int64  `json:"image_target_bytes"`
+	ImageMaxWidth     int    `json:"image_max_width"`
+	ImageMaxHeight    int    `json:"image_max_height"`
+
 	// path 是配置文件路径，不序列化（json:"-"）。
 	path string `json:"-"`
 }
@@ -67,30 +74,37 @@ func (c *Config) WindowSize() (width, height int) {
 }
 
 // Load 读取配置；文件不存在时写入默认值并返回默认配置。
+//
+// 配置是可选项：读取失败或内容损坏时返回【可用的默认配置】以及错误，
+// 调用方应记录错误但继续启动（US-13）。只有连配置路径都无法确定时才返回 nil。
 func Load(appName string) (*Config, error) {
 	path, err := appdir.File(appName, "config.json")
 	if err != nil {
 		return nil, err
 	}
 
+	c := Default()
+	c.path = path
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			c := Default()
-			c.path = path
 			if err := c.Save(); err != nil {
-				return nil, fmt.Errorf("写入默认配置失败: %w", err)
+				return c, fmt.Errorf("写入默认配置失败: %w", err)
 			}
 			return c, nil
 		}
-		return nil, fmt.Errorf("读取配置失败: %w", err)
+		return c, fmt.Errorf("读取配置失败，已使用默认值: %w", err)
 	}
 
-	c := Default()
 	if err := json.Unmarshal(data, c); err != nil {
-		return nil, fmt.Errorf("解析配置失败: %w", err)
+		fallback := Default()
+		fallback.path = path
+		if saveErr := fallback.Save(); saveErr != nil {
+			return fallback, fmt.Errorf("配置损坏，重写默认值失败: %w", saveErr)
+		}
+		return fallback, fmt.Errorf("配置损坏，已回退默认值: %w", err)
 	}
-	c.path = path
 	return c, nil
 }
 

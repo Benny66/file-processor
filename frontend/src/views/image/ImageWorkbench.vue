@@ -23,6 +23,27 @@
       </div>
     </header>
 
+    <div class="presets">
+      <label class="field" for="preset-select">
+        <span class="field__label">预设</span>
+        <select
+          id="preset-select"
+          class="select select--preset"
+          :value="selectedPresetId"
+          :disabled="busy || presets.length === 0"
+          @change="onPresetSelect"
+        >
+          <option value="">{{ presets.length === 0 ? '暂无预设' : '选择预设…' }}</option>
+          <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">
+            {{ preset.name }}
+          </option>
+        </select>
+      </label>
+      <button class="btn" type="button" :disabled="busy" @click="openPresetDialog">
+        管理预设
+      </button>
+    </div>
+
     <div v-if="items.length > 0" class="rules">
       <label class="field" for="output-format">
         <span class="field__label">输出格式</span>
@@ -177,6 +198,16 @@
     </ul>
 
     <CompareDialog :open="compareOpen" :item="compareItem" @close="closeCompare" />
+    <PresetDialog
+      :open="presetDialogOpen"
+      :presets="presets"
+      :rules="currentRules"
+      :loading="presetsLoading"
+      :load-error="presetsError?.message ?? ''"
+      @close="presetDialogOpen = false"
+      @refresh="refreshPresets"
+      @apply="applyPresetFromDialog"
+    />
   </section>
 </template>
 
@@ -184,22 +215,36 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   CancelBatch,
+  GetImageSettings,
   InspectImage,
+  ListPresets,
   ProcessBatch,
+  SaveImageSettings,
   ScanPaths,
   SelectDirectory,
   SelectFiles,
 } from '../../../wailsjs/go/main/App'
 import { service } from '../../../wailsjs/go/models'
 import { useEvent } from '../../composables/useEvent'
+import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
 import { BoxDimension, OutputFormat, TargetBytes, type OutputFormatValue } from '../../lib/image'
+import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
+import PresetDialog from './PresetDialog.vue'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
-import type { BatchResult, ImageProgress, ItemResult, QueueItem, ScanResult } from './types'
+import type {
+  BatchResult,
+  ImageProgress,
+  ItemResult,
+  Preset,
+  PresetRules,
+  QueueItem,
+  ScanResult,
+} from './types'
 
 const supportedFormats = 'JPG / PNG / WebP / BMP / TIFF / GIF（静态）'
 
@@ -227,6 +272,8 @@ const targetUnit = ref<'KB' | 'MB'>('KB')
 const resultsStale = ref(false)
 const compareOpen = ref(false)
 const compareItem = ref<QueueItem | null>(null)
+const presetDialogOpen = ref(false)
+const selectedPresetId = ref('')
 
 const busy = computed(() => importing.value || processing.value)
 const sizeBoxValid = computed(() => {
@@ -248,6 +295,12 @@ const targetValid = computed(() => {
     bytes <= TargetBytes.Max
   )
 })
+const currentRules = computed<PresetRules>(() => ({
+  output_format: outputFormat.value,
+  target_bytes: targetEnabled.value ? targetBytes.value : 0,
+  max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
+  max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
+}))
 const hasRule = computed(
   () => outputFormat.value !== OutputFormat.Keep || sizeBoxEnabled.value || targetEnabled.value,
 )
@@ -270,8 +323,20 @@ const formatOptions: { value: OutputFormatValue; label: string }[] = [
   { value: OutputFormat.WebP, label: 'WebP' },
 ]
 
+const {
+  list: presets,
+  loading: presetsLoading,
+  error: presetsError,
+  load: loadPresets,
+} = usePagedList<Preset>((req) => ListPresets(req), {
+  pageSize: PageSize.Max,
+  label: 'ListPresets',
+})
+
 let unregisterDrop: (() => void) | null = null
 let disposed = false
+let settingsLoaded = false
+let settingsTimer: ReturnType<typeof setTimeout> | null = null
 
 const inspectQueue: string[] = []
 const queuedForInspect = new Set<string>()
@@ -290,10 +355,124 @@ function markResultsStale() {
   if (items.value.some((item) => item.result)) resultsStale.value = true
 }
 
+function isOutputFormat(value: string): value is OutputFormatValue {
+  return formatOptions.some((option) => option.value === value)
+}
+
+function splitTargetBytes(bytes: number): { value: number; unit: 'KB' | 'MB' } {
+  const megabyte = 1024 * 1024
+  if (bytes >= megabyte && bytes % megabyte === 0) {
+    return { value: bytes / megabyte, unit: 'MB' }
+  }
+  // 持久化层要求整数 KB；旧配置/手改值按最近的 KB 回填，避免输入框出现小数。
+  return { value: Math.max(1, Math.round(bytes / 1024)), unit: 'KB' }
+}
+
+function applyRules(rules: PresetRules) {
+  if (isOutputFormat(rules.output_format)) {
+    outputFormat.value = rules.output_format
+  }
+  if (rules.target_bytes > 0) {
+    const split = splitTargetBytes(rules.target_bytes)
+    targetEnabled.value = true
+    targetValue.value = split.value
+    targetUnit.value = split.unit
+  } else {
+    targetEnabled.value = false
+  }
+  if (rules.max_width > 0 && rules.max_height > 0) {
+    sizeBoxEnabled.value = true
+    maxWidth.value = rules.max_width
+    maxHeight.value = rules.max_height
+  } else {
+    sizeBoxEnabled.value = false
+  }
+}
+
+async function saveImageSettings() {
+  try {
+    await invoke(() => SaveImageSettings(currentRules.value), 'SaveImageSettings')
+  } catch (e) {
+    logWarn('保存上次设置失败', e)
+  }
+}
+
+function scheduleSettingsSave() {
+  if (!settingsLoaded) return
+  if (settingsTimer) clearTimeout(settingsTimer)
+  settingsTimer = setTimeout(() => {
+    settingsTimer = null
+    void saveImageSettings()
+  }, 300)
+}
+
+async function flushSettingsSave() {
+  if (settingsTimer) {
+    clearTimeout(settingsTimer)
+    settingsTimer = null
+  }
+  await saveImageSettings()
+}
+
+async function loadImageSettings() {
+  try {
+    const saved = await invoke(() => GetImageSettings(), 'GetImageSettings')
+    applyRules(saved)
+  } catch (e) {
+    logWarn('恢复上次设置失败，使用默认值', e)
+  } finally {
+    settingsLoaded = true
+  }
+}
+
 watch(
   [outputFormat, sizeBoxEnabled, maxWidth, maxHeight, targetEnabled, targetValue, targetUnit],
-  markResultsStale,
+  () => {
+    markResultsStale()
+    scheduleSettingsSave()
+  },
 )
+
+watch(presets, (list) => {
+  if (selectedPresetId.value && !list.some((preset) => String(preset.id) === selectedPresetId.value)) {
+    selectedPresetId.value = ''
+  }
+})
+
+function refreshPresets() {
+  void loadPresets()
+}
+
+function openPresetDialog() {
+  if (busy.value) return
+  presetDialogOpen.value = true
+  refreshPresets()
+}
+
+function applyPreset(preset: Preset) {
+  selectedPresetId.value = String(preset.id)
+  applyRules({
+    output_format: preset.output_format,
+    target_bytes: preset.target_bytes,
+    max_width: preset.max_width,
+    max_height: preset.max_height,
+  })
+  logInfo('已应用预设', { id: preset.id, name: preset.name })
+  void flushSettingsSave()
+}
+
+function applyPresetFromDialog(preset: Preset) {
+  applyPreset(preset)
+  presetDialogOpen.value = false
+}
+
+function onPresetSelect(event: Event) {
+  const id = (event.target as HTMLSelectElement).value
+  selectedPresetId.value = id
+  const preset = presets.value.find((entry) => String(entry.id) === id)
+  if (!preset) return
+  applyPreset(preset)
+}
 
 function openCompare(path: string) {
   const item = items.value.find((entry) => entry.path === path)
@@ -441,14 +620,10 @@ async function startBatch() {
   for (const item of items.value) item.result = null
   resultsStale.value = false
   try {
+    await flushSettingsSave()
     const request = new service.BatchRequest({
       paths: batchPaths,
-      rules: {
-        output_format: outputFormat.value,
-        target_bytes: targetEnabled.value ? targetBytes.value : 0,
-        max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
-        max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
-      },
+      rules: currentRules.value,
     })
     const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
     applyBatchResult(result)
@@ -550,6 +725,8 @@ function clearQueue() {
 }
 
 onMounted(async () => {
+  void loadPresets()
+  void loadImageSettings()
   try {
     const rt = await import('../../../wailsjs/runtime/runtime')
     if (typeof rt.OnFileDrop !== 'function' || disposed) return
@@ -568,6 +745,11 @@ onUnmounted(() => {
   unregisterDrop = null
   inspectQueue.length = 0
   queuedForInspect.clear()
+  if (settingsTimer) {
+    clearTimeout(settingsTimer)
+    settingsTimer = null
+    void saveImageSettings()
+  }
 })
 </script>
 
@@ -623,6 +805,19 @@ onUnmounted(() => {
   margin: 0;
   color: var(--color-danger);
   font-size: var(--font-size-sm);
+}
+
+.presets {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.select--preset {
+  min-width: 150px;
+  max-width: 220px;
 }
 
 .rules {

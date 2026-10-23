@@ -34,7 +34,7 @@ func newExportTestService(t *testing.T) (*Service, string) {
 	if err := db.Create(&exportProbe{Name: "第一条"}).Error; err != nil {
 		t.Fatalf("写入测试数据失败: %v", err)
 	}
-	return New(db), dbPath
+	return New(db, nil), dbPath
 }
 
 // isolateHome 把数据目录重定向到临时目录，避免污染真实配置目录。

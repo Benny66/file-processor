@@ -10,6 +10,10 @@ export function Confirm(arg1, arg2) {
   return window['go']['main']['App']['Confirm'](arg1, arg2);
 }
 
+export function DeletePreset(arg1) {
+  return window['go']['main']['App']['DeletePreset'](arg1);
+}
+
 export function ExportDatabase(arg1) {
   return window['go']['main']['App']['ExportDatabase'](arg1);
 }
@@ -20,6 +24,10 @@ export function GetAppInfo() {
 
 export function GetDataDir() {
   return window['go']['main']['App']['GetDataDir']();
+}
+
+export function GetImageSettings() {
+  return window['go']['main']['App']['GetImageSettings']();
 }
 
 export function GetLaunchArgs() {
@@ -34,6 +42,10 @@ export function InspectImage(arg1) {
   return window['go']['main']['App']['InspectImage'](arg1);
 }
 
+export function ListPresets(arg1) {
+  return window['go']['main']['App']['ListPresets'](arg1);
+}
+
 export function OpenDataDir() {
   return window['go']['main']['App']['OpenDataDir']();
 }
@@ -44,6 +56,14 @@ export function ProcessBatch(arg1) {
 
 export function RenderPreview(arg1, arg2) {
   return window['go']['main']['App']['RenderPreview'](arg1, arg2);
+}
+
+export function SaveImageSettings(arg1) {
+  return window['go']['main']['App']['SaveImageSettings'](arg1);
+}
+
+export function SavePreset(arg1) {
+  return window['go']['main']['App']['SavePreset'](arg1);
 }
 
 export function ScanPaths(arg1, arg2) {

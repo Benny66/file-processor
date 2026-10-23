@@ -24,7 +24,7 @@
 | `internal/service/` | 业务服务层（绑定方法经此访问数据库） |
 | `internal/appdir/` | **单一真相**：应用数据目录（数据库/配置/日志/崩溃日志同目录） |
 | `internal/appinfo/` | 版本/平台/关键路径（版本注入目标见 `scripts/package.sh`） |
-| `internal/config/` | `config.json` 读写（主题 + 窗口几何） |
+| `internal/config/` | `config.json` 读写（主题 + 窗口几何 + 上次处理参数；损坏时回退默认值） |
 | `internal/logging/` | 日志初始化（文件轮转 + 分级）+ Wails logger 适配器 |
 | `internal/dialog/` | 原生对话框封装 |
 | `internal/reveal/` | 在系统文件管理器中打开目录（跨平台） |
@@ -54,7 +54,7 @@
 | `composables/` | 组合式函数（`useEvent` 自动解绑、`usePagedList` 列表加载） |
 | `styles/` | 设计令牌与主题（tokens / theme / element 覆盖） |
 | `views/` | 页面（`make gen` 生成的模块页面落在此处） |
-| `views/image/` | 图片处理工作台（空态；后续队列/参数/对比） |
+| `views/image/` | 图片处理工作台（导入队列、规则、批次、对比、预设） |
 
 ## 模板与工具
 

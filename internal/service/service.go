@@ -12,12 +12,15 @@ import (
 	"sync"
 
 	"gorm.io/gorm"
+
+	"file-processor/internal/config"
 )
 
 // Service 聚合所有业务服务，是绑定方法访问业务能力的唯一入口。
 // 由启动时初始化并注入 App，App 不再直接持有 *gorm.DB。
 type Service struct {
-	db *gorm.DB
+	db  *gorm.DB
+	cfg *config.Config
 
 	// 批次互斥状态：同一时间只允许一个批次；取消由 CancelBatch 触发。
 	batchMu      sync.Mutex
@@ -25,9 +28,9 @@ type Service struct {
 	batchRunning bool
 }
 
-// New 创建服务聚合，注入数据库连接。
-func New(db *gorm.DB) *Service {
-	return &Service{db: db}
+// New 创建服务聚合，注入数据库连接与配置。
+func New(db *gorm.DB, cfg *config.Config) *Service {
+	return &Service{db: db, cfg: cfg}
 }
 
 // Close 释放底层数据库连接，供优雅关闭时调用。

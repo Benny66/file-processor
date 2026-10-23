@@ -97,6 +97,40 @@ func TestSavePersistsWindowGeometry(t *testing.T) {
 	}
 }
 
+// TestLoadCorruptConfigFallsBack 损坏的 config.json MUST 回退默认值且可继续启动，
+// 同时把文件改写为合法默认值，避免每次启动都重复报同一个错。
+func TestLoadCorruptConfigFallsBack(t *testing.T) {
+	isolateHome(t)
+
+	path, err := appdir.File("cfgtest", "config.json")
+	if err != nil {
+		t.Fatalf("appdir.File 失败: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("{这不是 JSON"), 0o644); err != nil {
+		t.Fatalf("写入损坏配置失败: %v", err)
+	}
+
+	cfg, loadErr := Load("cfgtest")
+	if cfg == nil {
+		t.Fatal("配置损坏时仍须返回可用的默认配置")
+	}
+	if loadErr == nil {
+		t.Fatal("配置损坏应返回错误供调用方记录")
+	}
+	if cfg.Theme != "" || cfg.ImageOutputFormat != "" || cfg.ImageTargetBytes != 0 ||
+		cfg.ImageMaxWidth != 0 || cfg.ImageMaxHeight != 0 {
+		t.Errorf("配置损坏后未回退默认值：%+v", cfg)
+	}
+
+	reloaded, err := Load("cfgtest")
+	if err != nil {
+		t.Fatalf("损坏配置应已被默认值覆盖，重新加载失败: %v", err)
+	}
+	if w, h := reloaded.WindowSize(); w != DefaultWindowWidth || h != DefaultWindowHeight {
+		t.Errorf("重新加载的窗口尺寸 = (%d,%d)，期望默认值", w, h)
+	}
+}
+
 // TestSaveUsesSnakeCaseTags 落盘 JSON MUST 用 snake_case 字段名（与 CLAUDE.md 的 JSON tag 规范一致）。
 func TestSaveUsesSnakeCaseTags(t *testing.T) {
 	isolateHome(t)
@@ -122,7 +156,10 @@ func TestSaveUsesSnakeCaseTags(t *testing.T) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("解析配置失败: %v", err)
 	}
-	for _, key := range []string{"window_width", "window_height", "window_maximised"} {
+	for _, key := range []string{
+		"window_width", "window_height", "window_maximised",
+		"image_output_format", "image_target_bytes", "image_max_width", "image_max_height",
+	} {
 		if _, ok := raw[key]; !ok {
 			t.Errorf("落盘 JSON 缺少字段 %q（应为 snake_case，实际键: %v）", key, raw)
 		}

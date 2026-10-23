@@ -92,10 +92,14 @@ func main() {
 	boot.stage("数据库初始化")
 
 	cfg, err := config.Load(appName)
-	if err != nil {
+	if cfg == nil {
 		log.Fatalf("配置加载失败: %v", err)
 	}
-	app := NewApp(service.New(db), cfg)
+	if err != nil {
+		// 配置是可选项：丢失/损坏时用默认值继续启动，避免用户被一个坏文件挡在门外。
+		slog.Warn("配置不可用，已回退默认值", "err", err)
+	}
+	app := NewApp(service.New(db, cfg), cfg)
 	boot.stage("配置加载与组装")
 
 	// 窗口几何：在【创建期】给定尺寸与最大化状态，首帧即正确。

@@ -24,6 +24,7 @@ type BaseModel struct {
 // 新增模型时在本切片登记；make gen 会通过下方锚点自动注入新模块。
 func AllModels() []interface{} {
 	return []interface{}{
+		&ImagePreset{},
 		// gen:model
 	}
 }

@@ -14,6 +14,8 @@ import (
 	"file-processor/internal/dialog"
 	"file-processor/internal/event"
 	"file-processor/internal/imageproc"
+	"file-processor/internal/model"
+	"file-processor/internal/page"
 	"file-processor/internal/reveal"
 	"file-processor/internal/service"
 	"file-processor/internal/tray"
@@ -169,6 +171,35 @@ func (a *App) ProcessBatch(req service.BatchRequest) (service.BatchResult, error
 func (a *App) CancelBatch() error {
 	a.svc.CancelBatch()
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// 绑定方法：预设与上次设置
+// ---------------------------------------------------------------------------
+
+// ListPresets 分页返回处理参数预设。
+func (a *App) ListPresets(req page.Request) (page.Result[model.ImagePreset], error) {
+	return a.svc.ListPresets(req)
+}
+
+// SavePreset 新建（ID=0）或更新预设；名称去空白后必须唯一。
+func (a *App) SavePreset(preset model.ImagePreset) (model.ImagePreset, error) {
+	return a.svc.SavePreset(preset)
+}
+
+// DeletePreset 删除预设。
+func (a *App) DeletePreset(id uint) error {
+	return a.svc.DeletePreset(id)
+}
+
+// GetImageSettings 返回上次使用的图片处理参数。
+func (a *App) GetImageSettings() (service.BatchRules, error) {
+	return a.svc.GetImageSettings()
+}
+
+// SaveImageSettings 持久化上次使用的图片处理参数。
+func (a *App) SaveImageSettings(rules service.BatchRules) error {
+	return a.svc.SaveImageSettings(rules)
 }
 
 // ---------------------------------------------------------------------------

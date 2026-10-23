@@ -58,8 +58,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, toRef, watch } from 'vue'
 import { RenderPreview } from '../../../wailsjs/go/main/App'
+import { useModalFocus } from '../../composables/useModalFocus'
 import { invoke, type AppError } from '../../lib/invoke'
 import { formatBytes } from './format'
 import type { Preview, QueueItem } from './types'
@@ -118,42 +119,17 @@ async function loadPreviews() {
   await Promise.all(tasks)
 }
 
-function onKeydown(event: KeyboardEvent) {
-  if (props.open && event.key === 'Escape') {
-    event.preventDefault()
-    emit('close')
-  }
-}
-
 watch(
   () => [props.open, props.item?.path, props.item?.result?.output_path],
   () => void loadPreviews(),
   { immediate: true },
 )
 
-let lastFocused: HTMLElement | null = null
-
-watch(
-  () => props.open,
-  (open) => {
-    const root = document.getElementById('app')
-    if (open) {
-      lastFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      root?.setAttribute('inert', '')
-      void nextTick(() => panel.value?.focus())
-      return
-    }
-    root?.removeAttribute('inert')
-    lastFocused?.focus()
-    lastFocused = null
-  },
+useModalFocus(
+  toRef(props, 'open'),
+  panel,
+  () => emit('close'),
 )
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => {
-  window.removeEventListener('keydown', onKeydown)
-  document.getElementById('app')?.removeAttribute('inert')
-})
 </script>
 
 <style scoped>

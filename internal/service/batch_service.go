@@ -29,12 +29,32 @@ const (
 	TargetBytesMax int64 = 1073741824
 )
 
-// BatchRules 是一批图片的处理规则；目标体积与尺寸字段在后续切片实现。
+// BatchRules 是一批图片的处理规则；0 表示关闭该项。
 type BatchRules struct {
 	OutputFormat string `json:"output_format"`
 	TargetBytes  int64  `json:"target_bytes"`
 	MaxWidth     int    `json:"max_width"`
 	MaxHeight    int    `json:"max_height"`
+}
+
+// validateBatchRules 校验规则取值范围；批次、预设与上次设置共用同一套规则。
+func validateBatchRules(rules BatchRules) error {
+	if err := imageproc.ValidateOutputFormat(rules.OutputFormat); err != nil {
+		return err
+	}
+	if rules.TargetBytes != 0 &&
+		(rules.TargetBytes < TargetBytesMin || rules.TargetBytes > TargetBytesMax) {
+		return apperr.Validation("目标体积需在 1 KB–1 GB")
+	}
+	if (rules.MaxWidth == 0) != (rules.MaxHeight == 0) {
+		return apperr.Validation("宽高需同时设置")
+	}
+	if rules.MaxWidth != 0 &&
+		(rules.MaxWidth < BoxMinDimension || rules.MaxWidth > BoxMaxDimension ||
+			rules.MaxHeight < BoxMinDimension || rules.MaxHeight > BoxMaxDimension) {
+		return apperr.Validation("宽高需在 1–65535 px")
+	}
+	return nil
 }
 
 // BatchRequest 是一次批量处理请求。
@@ -93,20 +113,8 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	if len(req.Paths) == 0 {
 		return BatchResult{}, apperr.Validation("没有可处理的图片")
 	}
-	if err := imageproc.ValidateOutputFormat(req.Rules.OutputFormat); err != nil {
+	if err := validateBatchRules(req.Rules); err != nil {
 		return BatchResult{}, err
-	}
-	if req.Rules.TargetBytes != 0 &&
-		(req.Rules.TargetBytes < TargetBytesMin || req.Rules.TargetBytes > TargetBytesMax) {
-		return BatchResult{}, apperr.Validation("目标体积需在 1 KB–1 GB")
-	}
-	if (req.Rules.MaxWidth == 0) != (req.Rules.MaxHeight == 0) {
-		return BatchResult{}, apperr.Validation("宽高需同时设置")
-	}
-	if req.Rules.MaxWidth != 0 &&
-		(req.Rules.MaxWidth < BoxMinDimension || req.Rules.MaxWidth > BoxMaxDimension ||
-			req.Rules.MaxHeight < BoxMinDimension || req.Rules.MaxHeight > BoxMaxDimension) {
-		return BatchResult{}, apperr.Validation("宽高需在 1–65535 px")
 	}
 
 	s.batchMu.Lock()
