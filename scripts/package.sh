@@ -30,12 +30,8 @@ if grep -rq "$PLACEHOLDER" go.mod wails.json main.go 2>/dev/null; then
   exit 1
 fi
 
-# 应用名（来自 wails.json 的 outputfilename，用 python 精确解析 JSON）
-APP_NAME="$(python3 -c 'import json; print(json.load(open("wails.json"))["outputfilename"])' 2>/dev/null)"
-if [ -z "$APP_NAME" ]; then
-  echo "错误：无法从 wails.json 读取 outputfilename" >&2
-  exit 1
-fi
+# 应用名（来自 wails.json 的 outputfilename；解析逻辑由 scripts/app-name.sh 统一）
+APP_NAME="$(bash scripts/app-name.sh)"
 
 # 版本注入不在本脚本里做：统一由 scripts/build.sh 负责（读 wails.json 的
 # info.productVersion，同时喂给产物与 -ldflags）。下面所有构建都经它调用，

@@ -1,13 +1,13 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
-// 路由骨架：首页/设置为占位，具体内容由 example-module 填充。
+// 路由骨架：图片处理工作台 + 设置。
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'home',
-    component: () => import('../views/Home.vue'),
-    meta: { title: '仪表盘' },
+    name: 'image',
+    component: () => import('../views/image/ImageWorkbench.vue'),
+    meta: { title: '图片处理' },
   },
   {
     path: '/settings',

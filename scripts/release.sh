@@ -22,7 +22,7 @@ fi
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-APP_NAME="file-processor"
+APP_NAME="$(bash scripts/app-name.sh)"
 
 # 更新版本号单一真相（格式校验 + 写入 + 回读都在 set-version.sh 里，
 # 与 CI 的发布工作流共用同一处逻辑——两处各写一份版本是漂移的温床）。

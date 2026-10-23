@@ -41,7 +41,7 @@ func (a *App) startup(ctx context.Context) {
 	// 启动系统托盘（独立 goroutine）
 	stop, err := tray.Start(tray.Options{
 		Icon:    trayIcon(),
-		Tooltip: appName,
+		Tooltip: appDisplayName,
 	}, tray.Handlers{
 		OnShow: func() {
 			runtime.Show(a.ctx)

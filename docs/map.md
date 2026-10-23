@@ -54,6 +54,7 @@
 | `composables/` | 组合式函数（`useEvent` 自动解绑、`usePagedList` 列表加载） |
 | `styles/` | 设计令牌与主题（tokens / theme / element 覆盖） |
 | `views/` | 页面（`make gen` 生成的模块页面落在此处） |
+| `views/image/` | 图片处理工作台（空态；后续队列/参数/对比） |
 
 ## 模板与工具
 
@@ -61,6 +62,7 @@
 |---|---|
 | `_example/` | 模块生成器模板 + 契约用法范例（**非产品页面**） |
 | `scripts/set-version.sh` | **版本写入唯一实现**（本地发布与 CI 发布共用） |
+| `scripts/app-name.sh` | 从 `wails.json` 读取产物名（打包/冒烟/发布脚本共用） |
 | `scripts/build.sh` | **版本注入唯一入口**：读 `wails.json` 的 `info.productVersion`，同时喂给产物与 `-ldflags` |
 | `.github/workflows/` | `build.yml`（检查 + 编译矩阵）、`release.yml`（tag 触发自动发布） |
 | `scripts/gen.sh` | 模块生成器（`make gen name=<module>`） |

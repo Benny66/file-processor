@@ -1,8 +1,8 @@
-# wails-bailer-starter
+# 图片工坊 / ImageWorkshop
 
-基于 **Wails v2 (Go + Vue3)** 的桌面客户端脚手架基座，开箱即用、可反复复用。
+基于 **Wails v2 (Go + Vue3)** 的桌面图片处理客户端，支持批量格式转换、目标体积压缩与尺寸限制。
 
-> **这是脚手架母版，不是可直接运行的项目。** 用它开发新项目，先执行实例化脚本生成干净项目。
+> 仓库的构建与打包说明沿用脚手架基座；产品功能与交付文档正在补齐。
 
 - 后端：Go + gorm + SQLite（纯 Go 驱动，跨平台交叉编译无 CGO 依赖）
 - 前端：Vue3 + Vite + Element Plus + Vue Router + Pinia
@@ -35,7 +35,7 @@ bash scripts/init.sh myapp com.mycompany   # 第二个参数可选：macOS bundl
 
 | 依赖 | 版本 | 说明 |
 |---|---|---|
-| Go | ≥ 1.25 | `go version` 确认 |
+| Go | ≥ 1.26 | `go version` 确认 |
 | Node | ≥ 20 | `node --version` 确认 |
 | Wails CLI | v2.15+ | `go install github.com/wailsapp/wails/v2/cmd/wails@latest` |
 | 平台依赖 | — | Windows 需 WebView2；Linux 需 `libgtk-3-dev libwebkit2gtk-4.1-dev` + 构建时带 `-tags webkit2_41`（见下「已知限制」） |
@@ -101,7 +101,7 @@ make gen name=asset
 
 logo 在 `build/appicon.png`（前端资源与托盘图标共用）。
 
-> 品牌名/模块名已占位符化为 `file-processor`，通过 `scripts/init.sh` 实例化时全局替换，无需手改。
+> 对外产品名为图片工坊（ImageWorkshop）；Go module 仍为 `file-processor`。
 
 ## 架构护栏
 

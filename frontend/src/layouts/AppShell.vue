@@ -7,9 +7,9 @@ import { useAppStore } from '../stores/app'
 const store = useAppStore()
 const route = useRoute()
 
-// 侧栏菜单项（占位，后续模块可扩展）
+// 侧栏菜单项；图片处理为默认工作台，设置保留基座能力。
 const menuItems = [
-  { path: '/', label: '仪表盘', icon: '◈' },
+  { path: '/', label: '图片处理', icon: '◈' },
   { path: '/settings', label: '设置', icon: '⚙' },
   // gen:menu
 ]

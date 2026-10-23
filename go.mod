@@ -1,6 +1,6 @@
 module file-processor
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/energye/systray v1.0.3

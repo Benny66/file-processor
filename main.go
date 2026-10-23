@@ -29,7 +29,10 @@ var assets embed.FS
 var trayIconBytes []byte
 
 // appName 应用标识，用于定位用户配置目录下的数据文件与日志。
-const appName = "file-processor"
+const appName = "ImageWorkshop"
+
+// appDisplayName 用户可见的产品名，用于窗口标题与托盘提示。
+const appDisplayName = "图片工坊"
 
 // bootTimer 记录组合根各阶段的耗时，输出启动时间线的 Go 侧半段。
 //
@@ -106,7 +109,7 @@ func main() {
 
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title:            "file-processor",
+		Title:            appDisplayName,
 		Width:            winWidth,
 		Height:           winHeight,
 		WindowStartState: startState,
@@ -125,7 +128,7 @@ func main() {
 		Frameless: frameless(),
 		// 单实例锁：二次启动唤起已有窗口。
 		SingleInstanceLock: &options.SingleInstanceLock{
-			UniqueId: "file-processor-single-instance",
+			UniqueId: "ImageWorkshop-single-instance",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
 				slog.Info("检测到二次启动，唤起已有窗口", "args", data.Args)
 				runtime.Show(app.ctx)
