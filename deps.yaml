@@ -32,6 +32,14 @@ go:
     version: v2.2.1
     reason: 日志按大小轮转（MaxSize + MaxBackups），避免日志文件无限增长。
 
+  - module: github.com/gen2brain/webp
+    version: v0.6.4
+    reason: 纯 Go WebP 有损/无损编解码（WASM 转译 libwebp），配合 nodynamic 构建标签避免系统 libwebp 依赖；用于输入解码与后续输出编码。
+
+  - module: golang.org/x/image
+    version: v0.45.0
+    reason: BMP/TIFF/WebP 静态解码与 CatmullRom 缩放；002 spike 验证的版本，兼容 Go 1.25+。
+
 # ---- 前端直接依赖（package.json 的 dependencies） ----
 frontend:
   - package: vue

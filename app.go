@@ -13,6 +13,7 @@ import (
 	"file-processor/internal/config"
 	"file-processor/internal/dialog"
 	"file-processor/internal/event"
+	"file-processor/internal/imageproc"
 	"file-processor/internal/reveal"
 	"file-processor/internal/service"
 	"file-processor/internal/tray"
@@ -136,6 +137,11 @@ func (a *App) Confirm(title, message string) (bool, error) {
 // skip 是队列中已存在的绝对路径，用于跨批次去重。
 func (a *App) ScanPaths(paths, skip []string) (service.ScanResult, error) {
 	return a.svc.ScanPaths(paths, skip)
+}
+
+// InspectImage 读取图片元信息与缩略图；动图/损坏/超限返回可读错误。
+func (a *App) InspectImage(path string) (imageproc.Info, error) {
+	return a.svc.InspectImage(path)
 }
 
 // ---------------------------------------------------------------------------

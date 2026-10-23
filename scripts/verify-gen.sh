@@ -63,14 +63,14 @@ done
 echo "  ✓ import 幂等"
 
 echo "==> 3/6 生成 wails bindings（新绑定方法需要它，否则护栏会报绑定过期）..."
-if ! "$(go env GOPATH)/bin/wails" build >/dev/null 2>&1; then
+if ! "$(go env GOPATH)/bin/wails" build -tags nodynamic >/dev/null 2>&1; then
   echo "错误：wails build 失败——生成物或绑定生成有问题" >&2
   exit 1
 fi
 echo "  ✓ bindings 生成"
 
 echo "==> 4/6 断言生成物可编译 ..."
-if ! go build ./... 2>&1; then
+if ! go build -tags nodynamic ./... 2>&1; then
   echo "错误：生成物编译失败——gen.sh 产出的代码有问题" >&2
   exit 1
 fi
@@ -91,7 +91,7 @@ fi
 echo "  ✓ 格式合规"
 
 echo "==> 6/6 断言护栏通过 ..."
-if ! go test ./internal/guard/ 2>&1; then
+if ! go test -tags nodynamic ./internal/guard/ 2>&1; then
   echo "错误：生成物未通过契约护栏" >&2
   exit 1
 fi

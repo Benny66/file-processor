@@ -41,37 +41,27 @@
     </div>
 
     <ul v-else class="queue" aria-label="待处理图片">
-      <li v-for="item in items" :key="item.path" class="queue__row">
-        <div class="queue__icon" aria-hidden="true">▤</div>
-        <div class="queue__main">
-          <p class="queue__name" :title="item.path">{{ item.name }}</p>
-          <p class="queue__path" :title="item.path">{{ item.path }}</p>
-        </div>
-        <span class="queue__size">{{ formatBytes(item.size) }}</span>
-        <span class="queue__status">待检查</span>
-        <button
-          class="queue__remove"
-          type="button"
-          :disabled="importing"
-          @click="removeItem(item.path)"
-        >
-          移除
-        </button>
-      </li>
+      <QueueRow
+        v-for="item in items"
+        :key="item.path"
+        :item="item"
+        :busy="importing"
+        @inspect="requestInspect"
+        @remove="removeItem"
+      />
     </ul>
   </section>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { ScanPaths, SelectDirectory, SelectFiles } from '../../../wailsjs/go/main/App'
+import { InspectImage, ScanPaths, SelectDirectory, SelectFiles } from '../../../wailsjs/go/main/App'
 import { invoke, type AppError } from '../../lib/invoke'
-import { logError, logInfo } from '../../lib/log'
+import { logError, logInfo, logWarn } from '../../lib/log'
+import QueueRow from './QueueRow.vue'
+import type { QueueItem, ScanResult } from './types'
 
 const supportedFormats = 'JPG / PNG / WebP / BMP / TIFF / GIF（静态）'
-
-type ScanResult = Awaited<ReturnType<typeof ScanPaths>>
-type QueueItem = ScanResult['files'][number]
 
 interface ImportNote {
   text: string
@@ -86,21 +76,46 @@ const actionError = ref<AppError | null>(null)
 let unregisterDrop: (() => void) | null = null
 let disposed = false
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
-}
+const inspectQueue: string[] = []
+const queuedForInspect = new Set<string>()
+let inspecting = false
 
 function currentQueuePaths(): string[] {
   return items.value.map((item) => item.path)
+}
+
+function requestInspect(path: string) {
+  const item = items.value.find((entry) => entry.path === path)
+  if (!item || item.info || item.error || item.inspecting || queuedForInspect.has(path)) return
+  queuedForInspect.add(path)
+  inspectQueue.push(path)
+  void drainInspectQueue()
+}
+
+async function drainInspectQueue() {
+  if (inspecting) return
+  inspecting = true
+  try {
+    while (inspectQueue.length > 0) {
+      const path = inspectQueue.shift()
+      if (!path) continue
+      queuedForInspect.delete(path)
+      const item = items.value.find((entry) => entry.path === path)
+      if (!item || item.info || item.error) continue
+      item.inspecting = true
+      try {
+        item.info = await invoke(() => InspectImage(path), 'InspectImage')
+      } catch (e) {
+        const err = e as AppError
+        item.error = err.message
+        logWarn('图片检查失败', { path, code: err.code, message: err.message })
+      } finally {
+        item.inspecting = false
+      }
+    }
+  } finally {
+    inspecting = false
+  }
 }
 
 function scanNote(result: ScanResult, added: number): ImportNote {
@@ -131,7 +146,12 @@ async function importPaths(paths: string[]) {
   importNote.value = null
   try {
     const result = await invoke(() => ScanPaths(paths, currentQueuePaths()), 'ScanPaths')
-    const added = result.files
+    const added: QueueItem[] = result.files.map((file) => ({
+      ...file,
+      info: null,
+      error: null,
+      inspecting: false,
+    }))
     if (added.length > 0) {
       items.value = items.value.concat(added)
     }
@@ -180,6 +200,8 @@ function dismissNote() {
 function clearQueue() {
   if (importing.value) return
   items.value = []
+  inspectQueue.length = 0
+  queuedForInspect.clear()
   importNote.value = null
   actionError.value = null
 }
@@ -201,6 +223,8 @@ onUnmounted(() => {
   disposed = true
   unregisterDrop?.()
   unregisterDrop = null
+  inspectQueue.length = 0
+  queuedForInspect.clear()
 })
 </script>
 
@@ -300,14 +324,12 @@ onUnmounted(() => {
   color: var(--color-danger);
 }
 
-.btn:disabled,
-.queue__remove:disabled {
+.btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 .btn:focus-visible,
-.queue__remove:focus-visible,
 .notice__close:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
@@ -406,96 +428,5 @@ onUnmounted(() => {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--bg-raised);
-}
-
-.queue__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border-subtle);
-  transition: background-color var(--motion-fast) var(--ease-standard);
-}
-
-.queue__row:last-child {
-  border-bottom: none;
-}
-
-.queue__row:hover {
-  background: var(--bg-hover);
-}
-
-.queue__icon {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  background: var(--bg-hover);
-  color: var(--color-primary);
-  font-size: var(--font-size-md);
-}
-
-.queue__main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.queue__name,
-.queue__path {
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.queue__name {
-  color: var(--text-1);
-  font-size: var(--font-size-md);
-}
-
-.queue__path {
-  color: var(--text-3);
-  font-size: var(--font-size-xs);
-}
-
-.queue__size {
-  flex: none;
-  color: var(--text-2);
-  font-size: var(--font-size-sm);
-  font-variant-numeric: tabular-nums;
-}
-
-.queue__status {
-  flex: none;
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--bg-hover);
-  color: var(--text-2);
-  font-size: var(--font-size-xs);
-}
-
-.queue__remove {
-  flex: none;
-  border: none;
-  background: transparent;
-  color: var(--text-3);
-  font-family: inherit;
-  font-size: var(--font-size-sm);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: color var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard);
-}
-
-.queue__remove:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--color-danger);
 }
 </style>

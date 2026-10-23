@@ -50,7 +50,7 @@ trap cleanup EXIT
 
 # ---- 1. 构建 ----
 echo "==> 构建 ${APP_NAME} ..."
-"$WAILS" build >/dev/null 2>&1
+"$WAILS" build -tags nodynamic >/dev/null 2>&1
 
 if [ ! -f "$BIN" ]; then
   echo "错误：构建产物不存在 $BIN" >&2

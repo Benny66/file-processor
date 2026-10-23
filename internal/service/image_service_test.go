@@ -1,9 +1,16 @@
 package service
 
 import (
+	"bytes"
+	"errors"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"file-processor/internal/apperr"
+	"file-processor/internal/imageproc"
 )
 
 func writeScanTestFile(t *testing.T, path, content string) {
@@ -214,11 +221,11 @@ func TestScanPathsEmptyInput(t *testing.T) {
 
 func TestScanPathsDoesNotTrimPathWhitespace(t *testing.T) {
 	root := t.TempDir()
-	image := filepath.Join(root, "a.jpg")
-	writeScanTestFile(t, image, "a")
+	imagePath := filepath.Join(root, "a.jpg")
+	writeScanTestFile(t, imagePath, "a")
 
 	svc := &Service{}
-	result, err := svc.ScanPaths([]string{" " + image}, nil)
+	result, err := svc.ScanPaths([]string{" " + imagePath}, nil)
 	if err != nil {
 		t.Fatalf("ScanPaths 失败: %v", err)
 	}
@@ -227,5 +234,63 @@ func TestScanPathsDoesNotTrimPathWhitespace(t *testing.T) {
 	}
 	if len(result.Rejected) != 1 || result.Rejected[0].Reason != "无法访问" {
 		t.Fatalf("期望 1 条无法访问，实际：%+v", result.Rejected)
+	}
+}
+
+func TestInspectImageReadsFileAndBuildsThumbnail(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "图 片.png")
+	img := image.NewNRGBA(image.Rect(0, 0, 20, 10))
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png encode: %v", err)
+	}
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("写入图片失败: %v", err)
+	}
+
+	svc := &Service{}
+	info, err := svc.InspectImage(path)
+	if err != nil {
+		t.Fatalf("InspectImage 失败: %v", err)
+	}
+	if info.Path != path || info.Format != "png" || info.Width != 20 || info.Height != 10 {
+		t.Errorf("检查结果不对：%+v", info)
+	}
+	if info.Thumbnail == "" {
+		t.Errorf("缩略图为空")
+	}
+}
+
+func TestInspectImageRejectsOversizedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "big.jpg")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("创建稀疏文件失败: %v", err)
+	}
+	if err := f.Truncate(imageproc.MaxFileBytes + 1); err != nil {
+		f.Close()
+		t.Fatalf("截断文件失败: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("关闭文件失败: %v", err)
+	}
+
+	svc := &Service{}
+	_, err = svc.InspectImage(path)
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeValidation {
+		t.Fatalf("期望 validation 错误，实际：%v", err)
+	}
+	if !bytes.Contains([]byte(ae.Error()), []byte("512 MB")) {
+		t.Errorf("错误未说明 512 MB 上限：%q", ae.Error())
+	}
+}
+
+func TestInspectImageMissingFile(t *testing.T) {
+	svc := &Service{}
+	_, err := svc.InspectImage(filepath.Join(t.TempDir(), "missing.png"))
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeNotFound {
+		t.Fatalf("期望 not_found 错误，实际：%v", err)
 	}
 }

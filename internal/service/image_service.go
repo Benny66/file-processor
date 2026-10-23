@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"file-processor/internal/apperr"
 	"file-processor/internal/imageproc"
 )
 
@@ -94,6 +95,35 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 		return result.Rejected[i].Path < result.Rejected[j].Path
 	})
 	return result, nil
+}
+
+// InspectImage 读取图片元信息与缩略图；文件 I/O 在 service 层完成，
+// imageproc 只处理字节。失败返回可读的 apperr。
+func (s *Service) InspectImage(path string) (imageproc.Info, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return imageproc.Info{}, apperr.Validation("图片路径无效")
+	}
+	abs = filepath.Clean(abs)
+
+	stat, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return imageproc.Info{}, apperr.NotFound("图片不存在")
+		}
+		return imageproc.Info{}, apperr.Validation("无法读取图片")
+	}
+	if !stat.Mode().IsRegular() {
+		return imageproc.Info{}, apperr.Validation("不是普通文件")
+	}
+	if stat.Size() > imageproc.MaxFileBytes {
+		return imageproc.Info{}, apperr.Validation("图片超过 512 MB 上限")
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return imageproc.Info{}, apperr.Validation("无法读取图片")
+	}
+	return imageproc.Inspect(data, abs)
 }
 
 // scanImageDirectory 递归收集目录下的图片；隐藏目录、符号链接与普通非图片静默跳过。

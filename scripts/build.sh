@@ -71,7 +71,38 @@ if [ -n "$COMMIT" ]; then
 fi
 
 echo "==> 构建版本 ${VERSION}${COMMIT:+ (提交 ${COMMIT})}"
-"$WAILS" build -ldflags "$LDFLAGS" "$@"
+
+# ---- 统一启用 nodynamic ----
+# gen2brain/webp 默认会尝试通过 purego 加载系统 libwebp；nodynamic 强制使用内置
+# 纯 Go 后端，避免三平台运行环境差异。调用方可能已带 -tags（如 Linux 的
+# webkit2_41），这里做合并而不是覆盖。
+BUILD_ARGS=()
+TAGS_SET=0
+PREV=""
+for ARG in "$@"; do
+  if [ "$PREV" = "-tags" ]; then
+    case ",$ARG," in
+      *,nodynamic,*) BUILD_ARGS+=("$ARG") ;;
+      *) BUILD_ARGS+=("$ARG,nodynamic") ;;
+    esac
+    TAGS_SET=1
+  elif [ "${ARG#-tags=}" != "$ARG" ]; then
+    VALUE="${ARG#-tags=}"
+    case ",$VALUE," in
+      *,nodynamic,*) BUILD_ARGS+=("$ARG") ;;
+      *) BUILD_ARGS+=("-tags=$VALUE,nodynamic") ;;
+    esac
+    TAGS_SET=1
+  else
+    BUILD_ARGS+=("$ARG")
+  fi
+  PREV="$ARG"
+done
+if [ "$TAGS_SET" = "0" ]; then
+  BUILD_ARGS+=("-tags" "nodynamic")
+fi
+
+"$WAILS" build -ldflags "$LDFLAGS" "${BUILD_ARGS[@]}"
 
 # ---- 回读校验（macOS）----
 # 只断言「wails.json 被读到且渲染进产物」，这是本脚本存在的全部意义。

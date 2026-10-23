@@ -20,7 +20,7 @@ help: ## 列出所有命令及用途
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  make %-12s %s\n", $$1, $$2}'
 
 dev: ## 启动开发态（wails dev，含前端热更新）
-	$(WAILS) dev
+	$(WAILS) dev -tags nodynamic
 
 # 走 scripts/build.sh 而非裸 wails build：版本号需同时注入产物（Info.plist /
 # Windows 版本资源）与应用内（app.log / GetAppInfo），后者只能靠 ldflags，
@@ -42,13 +42,13 @@ require-dist:
 	}
 
 test: require-dist ## 运行 Go 测试（含架构护栏）
-	go test $(GO_PKGS)
+	go test -tags nodynamic $(GO_PKGS)
 
 # 前端类型检查不可省：开发态 vite 只剥离类型不做检查，缺了这步类型错误会漂到打包才炸。
 # 注意 recipe 内的 `cd frontend` 只影响该行（每行一个 shell），不会泄漏给后续行。
 lint: require-dist ## 静态检查（gofmt + Go 护栏 + go vet + 前端 ESLint + TS 类型）
 	@test -z "$$(gofmt -l . | grep -v node_modules)" || (echo "gofmt 未通过，请运行 gofmt -w 修复:" && gofmt -l . | grep -v node_modules && exit 1)
-	go test ./internal/guard/ && go vet $(GO_PKGS)
+	go test -tags nodynamic ./internal/guard/ && go vet -tags nodynamic $(GO_PKGS)
 	cd frontend && npx eslint "src/**/*.{vue,ts,js}" && npm run typecheck
 
 smoke: ## 冒烟测试（构建 → 启动 → 断言 → 清理）

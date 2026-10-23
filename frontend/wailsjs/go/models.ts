@@ -23,6 +23,35 @@ export namespace appinfo {
 
 }
 
+export namespace imageproc {
+	
+	export class Info {
+	    path: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    bytes: number;
+	    thumbnail: string;
+	    warning?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Info(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.bytes = source["bytes"];
+	        this.thumbnail = source["thumbnail"];
+	        this.warning = source["warning"];
+	    }
+	}
+
+}
+
 export namespace service {
 	
 	export class ScanRejection {

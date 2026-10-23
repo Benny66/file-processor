@@ -45,7 +45,7 @@
 | 绑定方法 | 输入 | 输出 / 语义 |
 |---|---|---|
 | `ScanPaths` | `paths []string, skip []string` | `ScanResult`：`files`（支持扩展名且可访问）+ `rejected`（不支持/不可访问/重复及原因）。`skip` 是队列已有绝对路径；不解码，保证导入快。 |
-| `InspectImage` | `path string` | `ImageInfo`：内容探测格式、方向归一后的宽高、字节数、是否动图、缩略图 base64。损坏/动图/超限返回可读错误。 |
+| `InspectImage` | `path string` | `ImageInfo`：内容探测格式、方向归一后的宽高、字节数、缩略图 base64、扩展名不一致 warning。动图/损坏/超限返回可读错误。 |
 | `RenderPreview` | `path string, maxEdge int` | `Preview`：base64 data URL、宽高、是否含透明。用于单张对比。 |
 | `ProcessBatch` | `BatchRequest` | 阻塞至批次结束并返回 `BatchResult`；期间发 `image:progress`，结束发 `image:done`。 |
 | `CancelBatch` | — | 设置取消标记；在当前文件完成后生效。 |
@@ -439,7 +439,7 @@ type BatchResult struct {
 - EXIF 方向：在 `internal/imageproc` 实现最小容器解析（JPEG APP1 / PNG eXIf / WebP EXIF / TIFF IFD0），覆盖大小端与 8 方向；不引入外部 EXIF 库。
 - 动图检测：WebP 扫描 `ANIM`/`ANMF` 块；GIF 计数图像描述符；不整段解码所有帧。
 - `purego` 是 `gen2brain/webp` 的间接依赖，`nodynamic` 下不编译/不链接。
-- 以上直接依赖在 005/006 引入产品时登记 `deps.yaml`；不要在依赖尚未进入 `go.mod` 前登记，否则反向校验会失败。
+- 005 已将 `gen2brain/webp` 与 `golang.org/x/image` 引入 `go.mod` 并登记 `deps.yaml`；Wails 与 Go 测试统一带 `nodynamic` 构建标签。
 - 已否决：`HugoSmits86/nativewebp`（仅无损）、CGO libwebp（破坏无额外 CGO 目标）、`dsoprea/go-exif`（130 个依赖，功能远超方向解析所需）。
 
 ### 7.4 身份与发布

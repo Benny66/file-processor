@@ -26,6 +26,10 @@ export function GetTheme() {
   return window['go']['main']['App']['GetTheme']();
 }
 
+export function InspectImage(arg1) {
+  return window['go']['main']['App']['InspectImage'](arg1);
+}
+
 export function OpenDataDir() {
   return window['go']['main']['App']['OpenDataDir']();
 }
