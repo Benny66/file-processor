@@ -44,7 +44,7 @@
 
 | 绑定方法 | 输入 | 输出 / 语义 |
 |---|---|---|
-| `ScanPaths` | `paths []string` | `ScanResult`：`files`（支持扩展名且可访问）+ `rejected`（不支持/不可访问及原因）。不解码，保证导入快。 |
+| `ScanPaths` | `paths []string, skip []string` | `ScanResult`：`files`（支持扩展名且可访问）+ `rejected`（不支持/不可访问/重复及原因）。`skip` 是队列已有绝对路径；不解码，保证导入快。 |
 | `InspectImage` | `path string` | `ImageInfo`：内容探测格式、方向归一后的宽高、字节数、是否动图、缩略图 base64。损坏/动图/超限返回可读错误。 |
 | `RenderPreview` | `path string, maxEdge int` | `Preview`：base64 data URL、宽高、是否含透明。用于单张对比。 |
 | `ProcessBatch` | `BatchRequest` | 阻塞至批次结束并返回 `BatchResult`；期间发 `image:progress`，结束发 `image:done`。 |

@@ -8,11 +8,24 @@ import (
 	"context"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"file-processor/internal/imageproc"
 )
 
 // SelectFile 打开"选择文件"对话框，返回所选路径（取消返回空串）。
 func SelectFile(ctx context.Context, title string) (string, error) {
 	return runtime.OpenFileDialog(ctx, runtime.OpenDialogOptions{Title: title})
+}
+
+// SelectFiles 打开多选文件对话框，只显示支持的图片扩展名；取消返回空切片。
+func SelectFiles(ctx context.Context, title string) ([]string, error) {
+	return runtime.OpenMultipleFilesDialog(ctx, runtime.OpenDialogOptions{
+		Title: title,
+		Filters: []runtime.FileFilter{{
+			DisplayName: "图片文件",
+			Pattern:     imageproc.DialogPattern(),
+		}},
+	})
 }
 
 // SelectDirectory 打开"选择目录"对话框，返回所选路径（取消返回空串）。

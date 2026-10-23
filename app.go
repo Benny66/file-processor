@@ -108,6 +108,11 @@ func (a *App) SelectFile(title string) (string, error) {
 	return dialog.SelectFile(a.ctx, title)
 }
 
+// SelectFiles 弹出多选文件对话框，返回所选路径；取消返回空切片。
+func (a *App) SelectFiles(title string) ([]string, error) {
+	return dialog.SelectFiles(a.ctx, title)
+}
+
 // SelectDirectory 弹出选择目录对话框，返回所选路径。
 func (a *App) SelectDirectory(title string) (string, error) {
 	return dialog.SelectDirectory(a.ctx, title)
@@ -121,6 +126,16 @@ func (a *App) SelectSaveFile(title, defaultFilename string) (string, error) {
 // Confirm 弹出确认框，返回用户是否确认。
 func (a *App) Confirm(title, message string) (bool, error) {
 	return dialog.Confirm(a.ctx, title, message)
+}
+
+// ---------------------------------------------------------------------------
+// 绑定方法：图片处理
+// ---------------------------------------------------------------------------
+
+// ScanPaths 扫描用户选择的文件与文件夹，返回可入队的图片与跳过原因。
+// skip 是队列中已存在的绝对路径，用于跨批次去重。
+func (a *App) ScanPaths(paths, skip []string) (service.ScanResult, error) {
+	return a.svc.ScanPaths(paths, skip)
 }
 
 // ---------------------------------------------------------------------------

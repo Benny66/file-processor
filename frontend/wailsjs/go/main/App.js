@@ -30,12 +30,20 @@ export function OpenDataDir() {
   return window['go']['main']['App']['OpenDataDir']();
 }
 
+export function ScanPaths(arg1, arg2) {
+  return window['go']['main']['App']['ScanPaths'](arg1, arg2);
+}
+
 export function SelectDirectory(arg1) {
   return window['go']['main']['App']['SelectDirectory'](arg1);
 }
 
 export function SelectFile(arg1) {
   return window['go']['main']['App']['SelectFile'](arg1);
+}
+
+export function SelectFiles(arg1) {
+  return window['go']['main']['App']['SelectFiles'](arg1);
 }
 
 export function SelectSaveFile(arg1, arg2) {
