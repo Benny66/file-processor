@@ -2,17 +2,18 @@
 
 package tray
 
-import "log/slog"
+import (
+	"errors"
+)
 
-// Start 在 macOS 上是 no-op：Wails v2 不支持 macOS 系统托盘。
+// ErrUnsupported 表示本平台不提供托盘能力。
 //
-// 原因：Wails v2 的 darwin frontend 自己持有 NSApplication 的 delegate（跑 WebKit），
-// 而所有 systray 库（getlantern 及其 fork）都要 setDelegate 来创建 NSStatusBar，
-// 两者互斥——链接期 AppDelegate 符号冲突，运行时 NSInternalInconsistencyException。
-//
-// 故 macOS 关闭即退出（HideWindowOnClose 在 macOS 上实际也由 Wails 处理为真退出），
-// 托盘能力仅在 Windows/Linux 提供。
+// 存在的意义：让「在 macOS 上调用 Start」成为一次**显式失败**，而不是一次
+// 返回 nil 的伪成功。此前 macOS 的 Start 是 no-op 且返回 nil error，调用方据此
+// 认定「托盘活着」，把关闭变成了隐藏——窗口消失且无法找回（US-34 禁止的状态）。
+var ErrUnsupported = errors.New("本平台不支持系统托盘")
+
+// Start 在 macOS 上不启动托盘，恒返回 ErrUnsupported（平台声明见 supported_darwin.go）。
 func Start(opts Options, h Handlers) (stop func(), err error) {
-	slog.Warn("macOS 不支持系统托盘，托盘能力已跳过")
-	return func() {}, nil
+	return nil, ErrUnsupported
 }

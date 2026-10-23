@@ -2,8 +2,10 @@ package guard
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/ast"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -91,7 +93,8 @@ var injectionTargetRe = regexp.MustCompile(`-X\s+\S*internal/appinfo\.([A-Za-z0-
 
 // TestVersionInjectionTargetsExist 断言构建脚本注入的符号在 appinfo 包真实存在。
 //
-// 注入点唯一：scripts/build.sh（make build / package.sh / release.sh 都经它构建）。
+// 注入点唯一：scripts/build.sh（make build / package.sh / release.sh / 容器构建 /
+// smoke / verify-gen 都经它构建，见下方 TestWailsBuildHasSingleEntryPoint）。
 // 这本身就是「版本号单一真相」的一部分——多处各算各的版本是双源漂移的温床。
 func TestVersionInjectionTargetsExist(t *testing.T) {
 	scripts := []string{"scripts/build.sh"}
@@ -144,6 +147,79 @@ func TestVersionInjectionTargetsExist(t *testing.T) {
 	if checked == 0 {
 		t.Fatalf("护栏未在任何打包脚本中解析到 -X internal/appinfo.* 注入——"+
 			"注入被移除或写法已变更，请同步更新护栏解析规则（%v）", scripts)
+	}
+}
+
+// TestWailsBuildHasSingleEntryPoint 是护栏 9 的另一半：注入目标存在还不够，
+// 构建【必须真的经过那个注入点】。
+//
+// 背景（005→011 累计审查抓到的真实缺陷）：scripts/build-linux-container.sh 在容器里
+// 裸调 `wails build`，绕开了 build.sh 的 -ldflags 注入。产物照常构建成功、
+// .deb 的 control 写着 0.1.0，而二进制内部 appinfo.Resolve() 恒为 "dev"
+// （wails 传 -buildvcs=false，第二层回退也拿不到）。护栏 9 只扫 build.sh，
+// 看不见这个旁路——于是同一版本两个真相，且没有任何症状。
+//
+// 规则：`wails build` 只允许出现在 scripts/build.sh。别的脚本要构建，必须调 build.sh。
+// 解析到 0 处构建调用即报错（护栏感知自己瞎了）。
+func TestWailsBuildHasSingleEntryPoint(t *testing.T) {
+	root := projectRoot()
+	const soleEntryPoint = "scripts/build.sh"
+
+	// 匹配 wails CLI 的构建调用，覆盖三种写法：
+	//   wails build / "$WAILS" build / "$(go env GOPATH)/bin/wails" build
+	buildRe := regexp.MustCompile(`(?i)wails["'}]?\s+build\b`)
+
+	files := []string{}
+	scriptsDir := filepath.Join(root, "scripts")
+	entries, err := os.ReadDir(scriptsDir)
+	if err != nil {
+		t.Fatalf("读取 scripts 目录失败: %v", err)
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sh") {
+			files = append(files, filepath.Join("scripts", e.Name()))
+		}
+	}
+	workflows := filepath.Join(root, ".github", "workflows")
+	wdEntries, err := os.ReadDir(workflows)
+	if err != nil {
+		t.Fatalf("读取 .github/workflows 失败——CI 也是构建入口，写法可能已变更: %v", err)
+	}
+	for _, e := range wdEntries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".yml") {
+			files = append(files, filepath.Join(".github", "workflows", e.Name()))
+		}
+	}
+	if len(files) == 0 {
+		t.Fatal("护栏未解析到任何构建脚本——写法可能已变更，请同步更新护栏解析规则")
+	}
+
+	matches := 0
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("读取 %s 失败: %v", rel, err)
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			// 注释与人读的输出文字不算构建调用（否则 "错误：wails build 失败" 会误报）。
+			if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "echo ") {
+				continue
+			}
+			if !buildRe.MatchString(line) {
+				continue
+			}
+			matches++
+			if rel != soleEntryPoint {
+				t.Errorf("%s:%d 直接调用 wails build，绕开了 %s 的版本/提交号注入——"+
+					"产物会自报 dev 而包元数据写着版本号。改为调用 bash %s\n\t%s",
+					rel, i+1, soleEntryPoint, soleEntryPoint, strings.TrimSpace(line))
+			}
+		}
+	}
+	if matches == 0 {
+		t.Fatalf("护栏在 scripts/ 与 .github/workflows/ 未解析到任何 wails build 调用——"+
+			"构建入口被重写或写法已变更，请同步更新护栏解析规则（扫描 %d 个文件）", len(files))
 	}
 }
 
@@ -353,4 +429,284 @@ func findWailsAppLiteral(f *ast.File) *ast.CompositeLit {
 		return true
 	})
 	return found
+}
+
+// ---------------------------------------------------------------------------
+// 护栏 12：构建/打包脚本不得依赖 python3
+//
+// 背景（005→011 累计审查抓到的真实缺陷）：package-deb.sh 与 app-name.sh 用 python3
+// 解析 wails.json。本地 macOS 装了 python3 所以一切正常，而 CI 的 linux-deb job 跑在
+// `container: ubuntu:20.04`——该镜像【没有 python3】（实测 command -v python3 为空），
+// 于是 `set -euo pipefail` 下解释器缺失直接 127 退出，job 必红。
+// 这类「只在 CI 环境暴露的依赖」不报错、不崩溃，只在推送后变红，故编译成会红的检查。
+//
+// 读 wails.json 请走 scripts/wails-info.sh（sed 实现，无解释器依赖）。
+// 铁律：解析到 0 个脚本必须报错（护栏感知自己瞎了）。
+// ---------------------------------------------------------------------------
+
+func TestBuildScriptsDoNotDependOnPython(t *testing.T) {
+	root := projectRoot()
+	pythonRe := regexp.MustCompile(`\bpython3?\b`)
+
+	files := []string{}
+	for _, dir := range []string{"scripts", filepath.Join(".github", "workflows")} {
+		entries, err := os.ReadDir(filepath.Join(root, dir))
+		if err != nil {
+			t.Fatalf("读取 %s 失败——写法可能已变更，请同步更新护栏解析规则: %v", dir, err)
+		}
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			if strings.HasSuffix(name, ".sh") || strings.HasSuffix(name, ".yml") {
+				files = append(files, filepath.Join(dir, name))
+			}
+		}
+	}
+	if len(files) == 0 {
+		t.Fatal("护栏未解析到任何构建脚本或工作流——写法可能已变更，请同步更新护栏解析规则")
+	}
+
+	for _, rel := range files {
+		data, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("读取 %s 失败: %v", rel, err)
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(trimmed, "#") {
+				continue // 注释里讲历史原因会提到 python3，不是依赖
+			}
+			if pythonRe.MatchString(line) {
+				t.Errorf("%s:%d 依赖 python3 —— CI 的 ubuntu:20.04 容器里没有它，该 job 会 127 退出。\n"+
+					"读 wails.json 请改用 bash scripts/wails-info.sh <key>\n\t%s",
+					rel, i+1, trimmed)
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 护栏 13：Go 发出的事件必须有前端订阅（发射↔订阅双向核对）
+//
+// 背景（005→011 累计审查抓到的真实缺陷）：app.go 在批次结束时发 `image:done`，
+// 前端全库只订了 `image:progress`，结果实际取自绑定调用的返回值。于是 done 是一条
+// 永不被人接的信道——不报错、不崩溃，只是默默空转。这类接线漏口正是铁律 5 推论
+// 要求编译成会红的检查。
+//
+// 做法：把两侧的 <domain>:<action> 都解析成字符串再比对（不靠约定、不靠人记）。
+// 需要豁免时必须写出理由，且豁免项一旦真的被订阅就报错（防止白名单烂掉）。
+// 铁律：任何一侧解析到 0 个结果都必须报错——护栏感知自己瞎了。
+// ---------------------------------------------------------------------------
+
+func TestEmittedEventsHaveSubscribers(t *testing.T) {
+	root := projectRoot()
+
+	// Go 侧动作常量的取值表：internal/event 的 Action*，与 main 包的 Action*。
+	actionValues := map[string]string{}
+	for key, val := range parseGoConstValues(t, filepath.Join(root, "internal", "event"), "Action", "") {
+		actionValues[key] = val
+	}
+	for key, val := range parseGoConstValues(t, root, "Action", "") {
+		actionValues[key] = val
+	}
+
+	// 1) 解析 Go 侧发射点：runtime.EventsEmit(ctx, event.Name("domain", [event.]ActionX), ...)
+	emitRe := regexp.MustCompile(`EventsEmit\([^,]+,\s*event\.Name\(\s*"([^"]+)"\s*,\s*(?:event\.)?([A-Za-z0-9_]+)\s*\)`)
+	goFiles, err := parseDir(root)
+	if err != nil {
+		t.Fatalf("解析根目录 Go 文件失败: %v", err)
+	}
+	emitted := map[string]string{} // "domain:action" -> 发射位置
+	for name := range goFiles {
+		data, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil {
+			continue
+		}
+		for i, line := range strings.Split(string(data), "\n") {
+			for _, m := range emitRe.FindAllStringSubmatch(line, -1) {
+				// actionValues 的键是去掉 Action 前缀后的部分（parseGoConstValues 的约定）。
+				value, ok := actionValues[strings.TrimPrefix(m[2], "Action")]
+				if !ok {
+					t.Errorf("%s:%d 发射事件的 action 标识符 %s 解析不到常量取值——写法可能已变更，请同步更新护栏解析规则",
+						name, i+1, m[2])
+					continue
+				}
+				emitted[m[1]+":"+value] = fmt.Sprintf("%s:%d", name, i+1)
+			}
+		}
+	}
+	if len(emitted) == 0 {
+		t.Fatalf("护栏在根目录未解析到任何 runtime.EventsEmit 发射点——"+
+			"事件被移除或写法已变更，请同步更新护栏解析规则（%d 个文件）", len(goFiles))
+	}
+
+	// 2) 解析前端订阅点：useEvent/onEvent/EventsOn 的第一参数
+	//    a) eventName('domain', EventAction.X)          b) 形如 SECOND_INSTANCE_EVENT 的常量
+	eventMaps := map[string]map[string]string{}
+	for _, spec := range []struct{ obj, file string }{
+		{"EventAction", filepath.Join(root, "frontend/src/lib/event.ts")},
+		{"AppEvent", filepath.Join(root, "frontend/src/lib/app.ts")},
+	} {
+		eventMaps[spec.obj] = parseTSObject(t, spec.file, spec.obj)
+	}
+	// 模板字符串常量：const NAME = `app:${AppEvent.SecondInstance}`
+	constNameRe := regexp.MustCompile("const\\s+([A-Z0-9_]+)\\s*=\\s*`([^`]*)\\$\\{(EventAction|AppEvent)\\.([A-Za-z0-9_]+)\\}`")
+	// 订阅的第一参数只有两种写法：eventName(...) 调用，或全大写的事件名常量。
+	// 注意不能用 `[^,]+` 截断——eventName('image', EventAction.Progress) 内部就带逗号。
+	subscribeRe := regexp.MustCompile(`(?:useEvent|onEvent|EventsOn)(?:<[^>]*>)?\(\s*(eventName\([^)]*\)|[A-Z0-9_]+)\s*,`)
+	eventNameCallRe := regexp.MustCompile(`eventName\(\s*'([^']+)'\s*,\s*(EventAction|AppEvent)\.([A-Za-z0-9_]+)`)
+
+	subscribed := map[string]string{}
+	templateConsts := map[string]string{} // 常量名 -> 事件名，如 SECOND_INSTANCE_EVENT -> app:second-instance
+
+	// 先把前端源码一次性收进来：常量可能定义在 A 文件、订阅写在 B 文件，
+	// 单遍扫描会因遍历顺序漏配，故分两趟（先建常量表，再解析订阅）。
+	type srcFile struct {
+		rel  string
+		text string
+	}
+	var sources []srcFile
+	walkErr := filepath.WalkDir(filepath.Join(root, "frontend", "src"), func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		ext := filepath.Ext(path)
+		if ext != ".ts" && ext != ".vue" {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		sources = append(sources, srcFile{strings.TrimPrefix(path, root+"/"), string(data)})
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("遍历前端源码失败: %v", walkErr)
+	}
+	if len(sources) == 0 {
+		t.Fatal("护栏在 frontend/src 未解析到任何 .ts/.vue 文件——写法可能已变更，请同步更新护栏解析规则")
+	}
+
+	for _, src := range sources {
+		for _, m := range constNameRe.FindAllStringSubmatch(src.text, -1) {
+			if value, ok := eventMaps[m[3]][m[4]]; ok {
+				templateConsts[m[1]] = m[2] + value
+			}
+		}
+	}
+
+	upperIdentRe := regexp.MustCompile(`^[A-Z0-9_]+$`)
+	for _, src := range sources {
+		for _, m := range subscribeRe.FindAllStringSubmatch(src.text, -1) {
+			arg := strings.TrimSpace(m[1])
+			if em := eventNameCallRe.FindStringSubmatch(arg); em != nil {
+				if value, ok := eventMaps[em[2]][em[3]]; ok {
+					subscribed[em[1]+":"+value] = src.rel
+				}
+				continue
+			}
+			if ident := upperIdentRe.FindString(arg); ident != "" {
+				if name, ok := templateConsts[ident]; ok {
+					subscribed[name] = src.rel
+				}
+			}
+		}
+	}
+	if len(subscribed) == 0 {
+		t.Fatal("护栏在 frontend/src 未解析到任何事件订阅（useEvent/onEvent/EventsOn）——" +
+			"订阅写法已变更，请同步更新护栏解析规则")
+	}
+
+	// 豁免表：必须写理由；已被订阅或已无人发射的条目要报错（防白名单烂掉）。
+	// 目前是空的——任何新增的「只发不收」信道都会在这里现形。
+	exceptions := map[string]string{}
+
+	for key, where := range emitted {
+		if _, ok := subscribed[key]; ok {
+			continue
+		}
+		if _, exempted := exceptions[key]; !exempted {
+			t.Errorf("%s 由 %s 发射，但前端没有任何订阅——这条信道静默空转。"+
+				"要么订阅，要么删掉发射；确需保留请在 exceptions 里写明理由", key, where)
+		}
+	}
+	for key := range exceptions {
+		if _, ok := subscribed[key]; ok {
+			t.Errorf("豁免项 %s 现在已被订阅——请删除 exceptions 里的这条理由，白名单不该留着失效条目", key)
+		}
+		if _, ok := emitted[key]; !ok {
+			t.Errorf("豁免项 %s 已无人发射——请删除 exceptions 里的这条理由", key)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 护栏 14：启动底色必须与前端 tokens 的 --bg-base 对得上
+//
+// Go 在 webview 起来之前就得给 BackgroundColour，所以这份颜色【无法不复制】。
+// 可复制的常量一旦没人看管就是第二处真相：005→011 累计审查发现它只对齐了深色档，
+// 浅色主题用户启动时闪的是近黑色。护栏把「两边一致」编译成会红的检查。
+//
+// 铁律：任何一侧解析到 0 个取值必须报错（护栏感知自己瞎了）。
+// ---------------------------------------------------------------------------
+
+func TestStartupBackgroundMatchesThemeTokens(t *testing.T) {
+	root := projectRoot()
+
+	cssPath := filepath.Join(root, "frontend", "src", "styles", "theme.css")
+	cssData, err := os.ReadFile(cssPath)
+	if err != nil {
+		t.Fatalf("读取 theme.css 失败——写法可能已变更，请同步更新护栏解析规则: %v", err)
+	}
+	baseRe := regexp.MustCompile(`--bg-base\s*:\s*#([0-9a-fA-F]{6})`)
+	tokens := map[string]bool{}
+	for _, m := range baseRe.FindAllStringSubmatch(string(cssData), -1) {
+		tokens[strings.ToLower(m[1])] = true
+	}
+	if len(tokens) == 0 {
+		t.Fatal("护栏在 theme.css 未解析到任何 --bg-base token——写法可能已变更，请同步更新护栏解析规则")
+	}
+
+	mainData, err := os.ReadFile(filepath.Join(root, "main.go"))
+	if err != nil {
+		t.Fatalf("读取 main.go 失败: %v", err)
+	}
+	fnRe := regexp.MustCompile(`(?s)func startupBackground[^{]*\{.*?\n\}`)
+	body := fnRe.FindString(string(mainData))
+	if body == "" {
+		t.Fatal("护栏在 main.go 未解析到 func startupBackground——底色改回硬编码或改名了，请同步更新护栏解析规则")
+	}
+	retRe := regexp.MustCompile(`return\s+(\d+)\s*,\s*(\d+)\s*,\s*(\d+)`)
+	returns := retRe.FindAllStringSubmatch(body, -1)
+	if len(returns) == 0 {
+		t.Fatal("护栏在 startupBackground 内未解析到任何 `return r, g, b`——写法可能已变更，请同步更新护栏解析规则")
+	}
+
+	for _, m := range returns {
+		hex := fmt.Sprintf("%02x%02x%02x", mustInt(t, m[1]), mustInt(t, m[2]), mustInt(t, m[3]))
+		if !tokens[hex] {
+			t.Errorf("main.go 的启动底色 rgb(%s, %s, %s) = #%s 不在 theme.css 的 --bg-base 取值里（%v）——"+
+				"改 token 时请同步 startupBackground", m[1], m[2], m[3], hex, keysOf(tokens))
+		}
+	}
+}
+
+func mustInt(t *testing.T, s string) int {
+	t.Helper()
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		t.Fatalf("解析数字 %q 失败: %v", s, err)
+	}
+	return n
+}
+
+func keysOf(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, "#"+k)
+	}
+	return out
 }

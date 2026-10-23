@@ -55,3 +55,33 @@ func TestFormatFromPath(t *testing.T) {
 		}
 	}
 }
+
+// TestSupportedFormatHintsCoverEverySupportedFormat 防止「引擎支持、清单不显示」：
+// supportedFormats 里每个格式都必须有展示名，且去重后各出现一次。
+func TestSupportedFormatHintsCoverEverySupportedFormat(t *testing.T) {
+	hints := SupportedFormatHints()
+	formats := make(map[string]bool)
+	for _, spec := range supportedFormats {
+		formats[spec.format] = true
+	}
+	if len(hints) != len(formats) {
+		t.Fatalf("展示清单有 %d 项，内容格式有 %d 种——去重或展示名表漂移：%v", len(hints), len(formats), hints)
+	}
+	for _, spec := range supportedFormats {
+		name, ok := formatDisplayNames[spec.format]
+		if !ok {
+			t.Errorf("格式 %q 没有展示名，前端清单会静默少一种（会走大写兜底）", spec.format)
+			continue
+		}
+		found := false
+		for _, hint := range hints {
+			if hint == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("清单缺少 %q（格式 %q）：%v", name, spec.format, hints)
+		}
+	}
+}

@@ -12,7 +12,9 @@ import (
 	"file-processor/internal/appdir"
 )
 
-// 窗口尺寸的默认值与合法范围（单一真相，config 与护栏共同引用）。
+// 窗口尺寸的默认值与合法范围（单一真相处；回退与夹取行为由 config_test.go 的
+// TestWindowSizeClamps 覆盖——曾经这里写着「config 与护栏共同引用」而 guard 里并无对应检查，
+// 注释承诺了一个不存在的护栏，比不写更糟）。
 const (
 	// DefaultWindowWidth / DefaultWindowHeight 首次启动或配置不可用时的窗口尺寸。
 	DefaultWindowWidth  = 1024

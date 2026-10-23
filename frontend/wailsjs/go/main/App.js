@@ -90,6 +90,14 @@ export function SetTheme(arg1) {
   return window['go']['main']['App']['SetTheme'](arg1);
 }
 
+export function SupportedFormatHints() {
+  return window['go']['main']['App']['SupportedFormatHints']();
+}
+
 export function TrayAvailable() {
   return window['go']['main']['App']['TrayAvailable']();
+}
+
+export function ValidateImageRules(arg1) {
+  return window['go']['main']['App']['ValidateImageRules'](arg1);
 }

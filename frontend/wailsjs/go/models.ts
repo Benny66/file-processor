@@ -217,6 +217,7 @@ export namespace service {
 	    width: number;
 	    height: number;
 	    extreme_degraded: boolean;
+	    alpha_flattened: boolean;
 	    message?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -233,6 +234,7 @@ export namespace service {
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.extreme_degraded = source["extreme_degraded"];
+	        this.alpha_flattened = source["alpha_flattened"];
 	        this.message = source["message"];
 	    }
 	}

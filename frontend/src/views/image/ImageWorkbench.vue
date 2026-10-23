@@ -138,15 +138,8 @@
       </button>
       <span v-if="processing" class="rules__progress">{{ processed }} / {{ total }}</span>
     </div>
-    <p v-if="items.length > 0 && targetEnabled && !targetValid" class="rules__hint">
-      目标体积需在 1 KB–1 GB。
-    </p>
-    <p v-else-if="items.length > 0 && sizeBoxEnabled && !sizeBoxValid" class="rules__hint">
-      宽高需为 1–65535 的整数。
-    </p>
-    <p v-else-if="items.length > 0 && !hasRule" class="rules__hint">
-      请选择输出格式，或开启目标体积/尺寸限制。
-    </p>
+    <!-- 文案来自 Go 的 validateBatchStart/validateBatchRules：判定与提示同一个出处 -->
+    <p v-if="items.length > 0 && ruleProblem" class="rules__hint">{{ ruleProblem }}</p>
     <div
       v-if="processing"
       class="progress"
@@ -181,7 +174,7 @@
     <div v-if="items.length === 0" class="dropzone" role="region" aria-label="图片导入区">
       <div class="dropzone__icon" aria-hidden="true">＋</div>
       <p class="dropzone__title">将图片或文件夹拖到这里</p>
-      <p class="dropzone__hint">支持 {{ supportedFormats }}</p>
+      <p v-if="supportedFormats" class="dropzone__hint">支持 {{ supportedFormats }}</p>
     </div>
 
     <ul v-else class="queue" aria-label="待处理图片">
@@ -223,13 +216,15 @@ import {
   ScanPaths,
   SelectDirectory,
   SelectFiles,
+  SupportedFormatHints,
+  ValidateImageRules,
 } from '../../../wailsjs/go/main/App'
 import { service } from '../../../wailsjs/go/models'
 import { useEvent } from '../../composables/useEvent'
 import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, OutputFormat, TargetBytes, type OutputFormatValue } from '../../lib/image'
+import { BoxDimension, ItemStatus, OutputFormat, type OutputFormatValue } from '../../lib/image'
 import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
@@ -246,7 +241,9 @@ import type {
   ScanResult,
 } from './types'
 
-const supportedFormats = 'JPG / PNG / WebP / BMP / TIFF / GIF（静态）'
+// 导入格式清单取自 Go（imageproc.supportedFormats 的展示投影）。
+// 此前这里是手写字符串：往引擎加一种格式，界面这句话不会跟着变。
+const supportedFormats = ref('')
 
 interface ImportNote {
   text: string
@@ -276,41 +273,45 @@ const presetDialogOpen = ref(false)
 const selectedPresetId = ref('')
 
 const busy = computed(() => importing.value || processing.value)
-const sizeBoxValid = computed(() => {
-  if (!sizeBoxEnabled.value) return true
-  const valid = (value: number) =>
-    Number.isInteger(value) && value >= BoxDimension.Min && value <= BoxDimension.Max
-  return valid(maxWidth.value) && valid(maxHeight.value)
-})
 const targetBytes = computed(() =>
   targetUnit.value === 'MB' ? targetValue.value * 1024 * 1024 : targetValue.value * 1024,
 )
-const targetValid = computed(() => {
-  if (!targetEnabled.value) return true
-  const bytes = targetBytes.value
-  return (
-    Number.isFinite(bytes) &&
-    Number.isInteger(bytes) &&
-    bytes >= TargetBytes.Min &&
-    bytes <= TargetBytes.Max
-  )
-})
 const currentRules = computed<PresetRules>(() => ({
   output_format: outputFormat.value,
   target_bytes: targetEnabled.value ? targetBytes.value : 0,
   max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
   max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
 }))
-const hasRule = computed(
-  () => outputFormat.value !== OutputFormat.Keep || sizeBoxEnabled.value || targetEnabled.value,
-)
+
+// 「能不能开始」由 Go 判定（US-11），前端只转述它给的原因。
+//
+// 此前这里复制了一份 Go 的范围校验（targetValid/sizeBoxValid）加三条手写文案，
+// 是【同一条规则的两个实现】，而且已经漂移：Go 有「宽高需同时设置」，前端没有，
+// 宽填 800、高留空时前端提示「宽高需为 1–65535 的整数」，真实被拒原因却是另一条。
+// 铁律 1：镜像只许复制常量与类型，不许复制逻辑。
+const ruleProblem = ref('')
+let ruleToken = 0
+async function refreshRuleProblem(): Promise<void> {
+  const token = ++ruleToken
+  let message: string
+  try {
+    message = (await invoke(() => ValidateImageRules(currentRules.value), 'ValidateImageRules')) ?? ''
+  } catch (e) {
+    // 预检本身失败时【失败关闭】：宁可不让开始，也不能带着未知规则开跑。
+    message = e instanceof Error ? e.message : '规则校验暂时不可用'
+    logWarn('规则预检失败', e)
+  }
+  // 只采纳最后一次请求的结果：连续输入时旧响应可能后到。
+  if (disposed || token !== ruleToken) return
+  ruleProblem.value = message
+}
+watch(currentRules, () => void refreshRuleProblem(), { immediate: true })
+
 const canStart = computed(
   () =>
     items.value.some((item) => !item.error) &&
     !busy.value &&
-    hasRule.value &&
-    sizeBoxValid.value &&
-    targetValid.value &&
+    ruleProblem.value === '' &&
     !items.value.some((item) => item.inspecting),
 )
 const progressPercent = computed(() =>
@@ -348,7 +349,20 @@ function currentQueuePaths(): string[] {
 
 function applyItemResult(result: ItemResult) {
   const item = items.value.find((entry) => entry.path === result.path)
-  if (item) item.result = result
+  if (!item) return
+  item.result = result
+  // 结果落定后，「排队/处理中」这两格就该退场——它们是过程态。
+  item.queued = false
+  item.processing = false
+}
+
+// US-14「处理中」的唯一来源：Go 在 worker 领取任务时播报的 started。
+// 前端不自己推断谁在跑——两个 worker 并行时推断必然出错。
+function applyItemStarted(started: ItemResult) {
+  const item = items.value.find((entry) => entry.path === started.path)
+  if (!item) return
+  item.queued = false
+  item.processing = true
 }
 
 function markResultsStale() {
@@ -412,6 +426,17 @@ async function flushSettingsSave() {
     settingsTimer = null
   }
   await saveImageSettings()
+}
+
+// 导入格式清单向 Go 取一次（imageproc 是单一真相），界面不再手写。
+async function loadSupportedFormats(): Promise<void> {
+  try {
+    const hints = await invoke(() => SupportedFormatHints(), 'SupportedFormatHints')
+    if (disposed || !hints) return
+    supportedFormats.value = hints.join(' / ')
+  } catch (e) {
+    logWarn('读取受支持格式清单失败', e)
+  }
 }
 
 async function loadImageSettings() {
@@ -488,6 +513,7 @@ function closeCompare() {
 useEvent<ImageProgress>(eventName('image', EventAction.Progress), (progress) => {
   processed.value = progress.done
   total.value = progress.total
+  if (progress.started) applyItemStarted(progress.started)
   if (progress.current) applyItemResult(progress.current)
 })
 
@@ -560,6 +586,8 @@ async function importPaths(paths: string[]) {
       error: null,
       inspecting: false,
       result: null,
+      queued: false,
+      processing: false,
     }))
     if (added.length > 0) {
       items.value = items.value.concat(added)
@@ -585,10 +613,17 @@ function summaryText(result: BatchResult): string {
   if (result.canceled > 0) parts.push(`取消 ${result.canceled}`)
   if (result.extreme_degraded > 0) parts.push(`极端降级 ${result.extreme_degraded}`)
   let text = `处理完成：${parts.join('、')}`
-  if (result.saved_bytes > 0) {
-    text += `；累计节省 ${formatBytes(result.saved_bytes)}`
-  } else if (result.saved_bytes < 0) {
-    text += `；累计增加 ${formatBytes(-result.saved_bytes)}`
+  // US-27：批次总计给出字节与百分比；输出更大时说「累计增加」，百分比同样带出。
+  if (result.saved_bytes !== 0) {
+    const sourceTotal = result.items
+      .filter((item) => item.status === ItemStatus.Success)
+      .reduce((sum, item) => sum + (item.source_bytes || 0), 0)
+    const label = result.saved_bytes > 0 ? '累计节省' : '累计增加'
+    text += `；${label} ${formatBytes(Math.abs(result.saved_bytes))}`
+    if (sourceTotal > 0) {
+      const percent = Math.round((Math.abs(result.saved_bytes) / sourceTotal) * 100)
+      if (percent > 0) text += `（${percent}%）`
+    }
   }
   return text
 }
@@ -617,7 +652,13 @@ async function startBatch() {
   batchSummary.value = null
   actionError.value = null
   importNote.value = null
-  for (const item of items.value) item.result = null
+  const inBatch = new Set(batchPaths)
+  for (const item of items.value) {
+    item.result = null
+    item.processing = false
+    // US-14：开跑即进入「排队」，之后由 Go 的 started 事件升级为「处理中」。
+    item.queued = inBatch.has(item.path)
+  }
   resultsStale.value = false
   try {
     await flushSettingsSave()
@@ -633,6 +674,11 @@ async function startBatch() {
   } finally {
     processing.value = false
     canceling.value = false
+    // 批次结束或异常退出都不该留下过程态（否则「处理中」会永远挂着）。
+    for (const item of items.value) {
+      item.queued = false
+      item.processing = false
+    }
   }
 }
 
@@ -726,6 +772,7 @@ function clearQueue() {
 
 onMounted(async () => {
   void loadPresets()
+  void loadSupportedFormats()
   void loadImageSettings()
   try {
     const rt = await import('../../../wailsjs/runtime/runtime')

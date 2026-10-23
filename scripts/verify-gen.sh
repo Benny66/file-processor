@@ -63,8 +63,9 @@ done
 echo "  ✓ import 幂等"
 
 echo "==> 3/6 生成 wails bindings（新绑定方法需要它，否则护栏会报绑定过期）..."
-if ! "$(go env GOPATH)/bin/wails" build -tags nodynamic >/dev/null 2>&1; then
-  echo "错误：wails build 失败——生成物或绑定生成有问题" >&2
+# 经 scripts/build.sh 构建：wails build 只允许那一个入口（护栏会拦直调）。
+if ! bash scripts/build.sh -tags nodynamic >/dev/null 2>&1; then
+  echo "错误：构建/绑定生成失败——生成物或绑定生成有问题" >&2
   exit 1
 fi
 echo "  ✓ bindings 生成"

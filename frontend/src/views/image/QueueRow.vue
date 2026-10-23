@@ -32,11 +32,12 @@
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
     <span v-if="item.result && stale" class="row__stale">结果已过期</span>
     <span v-if="item.result?.extreme_degraded" class="row__extreme">已明显降质</span>
+    <!-- US-14：处理期间仍要能查看结果，所以对比不受 busy 限制；
+         US-06 只禁止「编辑队列」，移除按钮才需要 busy。 -->
     <button
       v-if="canCompare"
       class="row__compare"
       type="button"
-      :disabled="busy"
       @click="emit('compare', item.path)"
     >
       对比
@@ -49,7 +50,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ItemStatus } from '../../lib/image'
+import { ItemStatus, type ItemStatusValue } from '../../lib/image'
 import { formatBytes } from './format'
 import type { QueueItem } from './types'
 
@@ -63,45 +64,36 @@ const emit = defineEmits<{
 const root = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
-const statusLabel = computed(() => {
-  const result = props.item.result
-  if (result) {
-    switch (result.status) {
-      case ItemStatus.Success:
-        return '成功'
-      case ItemStatus.Failed:
-        return '失败'
-      case ItemStatus.Skipped:
-        return '已跳过'
-      case ItemStatus.Canceled:
-        return '已取消'
-    }
-  }
-  if (props.item.inspecting) return '检查中'
-  if (props.item.error) return '失败'
-  if (props.item.info) return '可处理'
-  return '待检查'
-})
+const statusLabel = computed(() => statusPresentation().label)
+const statusClass = computed(() => statusPresentation().cls)
 
-const statusClass = computed(() => {
+// 状态到「文案 + 样式」的单一映射。
+//
+// 为什么合并：此前 statusLabel 与 statusClass 各写一份 4 分支 switch，Go 新增
+// Status* 时 parity 护栏只校验常量镜像、管不到前端 switch——漏改一个分支不报错，
+// 只是在队列里显示「可处理」（铁律 5 说的无症状失效）。合并成一张表后只有改表一处。
+// 表里没有的取值原样带出状态名，让「漏登记」在界面上Visible，而不是回落到「可处理」。
+function statusPresentation(): { label: string; cls: string } {
   const result = props.item.result
   if (result) {
-    switch (result.status) {
-      case ItemStatus.Success:
-        return 'row__status--ok'
-      case ItemStatus.Failed:
-        return 'row__status--failed'
-      case ItemStatus.Skipped:
-        return 'row__status--skipped'
-      case ItemStatus.Canceled:
-        return 'row__status--canceled'
-    }
+    const known = RESULT_STATUS[result.status as ItemStatusValue]
+    return known ?? { label: `未知状态(${result.status})`, cls: 'row__status--failed' }
   }
-  if (props.item.error) return 'row__status--failed'
-  if (props.item.inspecting) return 'row__status--busy'
-  if (props.item.info) return 'row__status--ok'
-  return ''
-})
+  if (props.item.processing) return { label: '处理中', cls: 'row__status--busy' }
+  if (props.item.queued) return { label: '排队', cls: 'row__status--queued' }
+  if (props.item.inspecting) return { label: '检查中', cls: 'row__status--busy' }
+  if (props.item.error) return { label: '失败', cls: 'row__status--failed' }
+  if (props.item.info) return { label: '可处理', cls: 'row__status--ok' }
+  return { label: '待检查', cls: '' }
+}
+
+const RESULT_STATUS: Record<ItemStatusValue, { label: string; cls: string }> = {
+  [ItemStatus.Success]: { label: '成功', cls: 'row__status--ok' },
+  [ItemStatus.Failed]: { label: '失败', cls: 'row__status--failed' },
+  [ItemStatus.Skipped]: { label: '已跳过', cls: 'row__status--skipped' },
+  [ItemStatus.Canceled]: { label: '已取消', cls: 'row__status--canceled' },
+  [ItemStatus.Processing]: { label: '处理中', cls: 'row__status--busy' },
+}
 
 const hasFailure = computed(
   () => props.item.result?.status === ItemStatus.Failed || !!props.item.error,
@@ -118,6 +110,10 @@ const warning = computed(() => {
   const parts: string[] = []
   if (props.item.result?.status === ItemStatus.Skipped) {
     parts.push(props.item.result.message || '已跳过')
+  }
+  // US-20：铺白由引擎判定并回传（alpha_flattened），前端只转述不再判断。
+  if (props.item.result?.alpha_flattened) {
+    parts.push('透明背景已铺白')
   }
   if (props.item.info?.warning) {
     parts.push(props.item.info.warning)
@@ -136,10 +132,17 @@ const dimensions = computed(() => {
   return ''
 })
 
+// US-27：成功项显示输出体积与节省比例；输出更大时显示「增大 x%」（负节省）。
 const outputSize = computed(() => {
   const result = props.item.result
   if (result?.status !== ItemStatus.Success) return ''
-  return formatBytes(result.output_bytes)
+  const text = formatBytes(result.output_bytes)
+  const source = result.source_bytes || props.item.size
+  if (source <= 0) return text
+  const saved = source - result.output_bytes
+  const percent = Math.round((Math.abs(saved) / source) * 100)
+  if (percent === 0) return `${text}（体积持平）`
+  return `${text}（${saved > 0 ? '节省' : '增大'} ${percent}%）`
 })
 
 const canCompare = computed(
@@ -355,6 +358,11 @@ onUnmounted(() => {
 
 .row__status--busy {
   color: var(--text-2);
+}
+
+/* US-14「排队」是比「处理中」更弱的一格：还没轮到它。 */
+.row__status--queued {
+  color: var(--text-3);
 }
 
 .row__compare {

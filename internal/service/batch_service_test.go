@@ -6,6 +6,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,9 +54,18 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	if item.Width != 20 || item.Height != 10 {
 		t.Errorf("输出尺寸 = %dx%d，期望 20x10", item.Width, item.Height)
 	}
-	if len(progress) != 1 || progress[0].Done != 1 || progress[0].Total != 1 ||
-		progress[0].Current == nil || progress[0].Current.Status != StatusSuccess {
-		t.Errorf("进度事件不对：%+v", progress)
+	// US-14 状态机：开工先播一帧「处理中」，完成再播一帧结果。
+	// 「处理中」只能由 Go 发——两个 worker 并行，前端从完成事件反推不出谁在跑。
+	if len(progress) != 2 {
+		t.Fatalf("进度事件帧数 = %d，期望 2（started + current）：%+v", len(progress), progress)
+	}
+	if p0 := progress[0]; p0.Current != nil || p0.Started == nil ||
+		p0.Started.Status != StatusProcessing || p0.Started.Path != src || p0.Done != 0 {
+		t.Errorf("开工帧不对：%+v", progress[0])
+	}
+	if p1 := progress[1]; p1.Started != nil || p1.Done != 1 || p1.Total != 1 ||
+		p1.Current == nil || p1.Current.Status != StatusSuccess {
+		t.Errorf("完成帧不对：%+v", progress[1])
 	}
 
 	firstOutput, err := os.ReadFile(item.OutputPath)
@@ -144,6 +154,86 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 	}
 	if string(sourceNow) != string(validBytes) {
 		t.Errorf("源文件被修改")
+	}
+}
+
+// TestProcessBatchLogsEachFailure US-26：每个失败都要写入日志（路径 + 原因），
+// 且日志不得包含图片内容。断言的是【日志产物】，不是「函数没报错」。
+func TestProcessBatchLogsEachFailure(t *testing.T) {
+	dir := t.TempDir()
+	corrupt := filepath.Join(dir, "bad.jpg")
+	body := "fake-image-bytes"
+	if err := os.WriteFile(corrupt, []byte(body), 0o644); err != nil {
+		t.Fatalf("写入损坏文件失败: %v", err)
+	}
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	svc := &Service{}
+	if _, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{corrupt},
+			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG},
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "图片处理失败") {
+		t.Errorf("失败没有落日志，日志内容：%q", logged)
+	}
+	if !strings.Contains(logged, corrupt) {
+		t.Errorf("日志缺路径：%q", logged)
+	}
+	if !strings.Contains(logged, "无法识别") {
+		t.Errorf("日志缺原因：%q", logged)
+	}
+	if strings.Contains(logged, body) {
+		t.Errorf("日志包含了文件内容：%q", logged)
+	}
+}
+
+// TestProcessBatchReportsAlphaFlattened US-20：铺白这个事实要透到队列项上，
+// 否则前端的「透明背景已铺白」提示无从产生（判定在 imageproc，服务层只透传）。
+func TestProcessBatchReportsAlphaFlattened(t *testing.T) {
+	dir := t.TempDir()
+	src := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			if x < 4 {
+				src.SetNRGBA(x, y, color.NRGBA{}) // 左半透明
+			} else {
+				src.SetNRGBA(x, y, color.NRGBA{R: 200, G: 40, B: 40, A: 255})
+			}
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, src); err != nil {
+		t.Fatalf("编码测试图失败: %v", err)
+	}
+	path := filepath.Join(dir, "alpha.png")
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{Paths: []string{path}, Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Items[0].Status != StatusSuccess {
+		t.Fatalf("未成功：%+v", result.Items[0])
+	}
+	if !result.Items[0].AlphaFlattened {
+		t.Errorf("透明图转 JPEG 未回传 AlphaFlattened：%+v", result.Items[0])
 	}
 }
 

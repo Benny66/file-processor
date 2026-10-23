@@ -20,6 +20,8 @@ export const ItemStatus = {
   Failed: 'failed',
   Skipped: 'skipped',
   Canceled: 'canceled',
+  /** 处理中：只经进度事件出现，不会出现在最终批次结果里（US-14）。 */
+  Processing: 'processing',
 } as const
 
 /** 处理状态取值类型。 */

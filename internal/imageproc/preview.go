@@ -58,7 +58,7 @@ func RenderPreview(data []byte, path string, maxEdge int) (Preview, error) {
 		}
 		prefix = "data:image/png;base64,"
 	} else {
-		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 85}); err != nil {
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: DefaultQuality}); err != nil {
 			return Preview{}, apperr.Wrap(err)
 		}
 		prefix = "data:image/jpeg;base64,"

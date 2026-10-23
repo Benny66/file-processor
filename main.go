@@ -111,6 +111,13 @@ func main() {
 		startState = options.Maximised
 	}
 
+	// 启动底色与前端 tokens 的 --bg-base 对齐：不一致时首帧前会闪一下错色
+	// （浅色主题用户看到暗底启动，正是此前硬编码深色留下的症状）。
+	// 这仍是一份【刻意保留的跨端复制】——webview 起来之前 Go 必须先给一个值；
+	// 由护栏 TestStartupBackgroundMatchesThemeTokens 与 theme.css 双向核对，漂移即红。
+	// theme 为空（跟随系统）时取 :root 的深色档，与 CSS 默认一致。
+	bgR, bgG, bgB := startupBackground(cfg.Theme)
+
 	// Create application with options
 	err = wails.Run(&options.App{
 		Title:            appDisplayName,
@@ -151,7 +158,7 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 14, G: 15, B: 18, A: 1}, // 与 tokens 的 --bg-base 一致，避免启动白闪
+		BackgroundColour: &options.RGBA{R: bgR, G: bgG, B: bgB, A: 1}, // 与 tokens 的 --bg-base 一致，避免启动闪色
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
@@ -175,4 +182,19 @@ func main() {
 // trayIcon 返回托盘图标字节。
 func trayIcon() []byte {
 	return trayIconBytes
+}
+
+// startupBackground 返回与主题一致的启动底色（R/G/B，0–255）。
+//
+// 取值必须与 frontend/src/styles/theme.css 的 --bg-base 一一对应：
+//   - 深色（:root）  #0e0f12 → 14, 15, 18
+//   - 浅色（light） #f7f8fa → 247, 248, 250
+//
+// 对应关系由 internal/guard/wiring_test.go 的护栏双向核对——改了 CSS token 而没改这里
+// 会立刻变红，因为这份复制无法避免（webview 起来之前 Go 就得给出颜色）。
+func startupBackground(theme string) (r, g, b uint8) {
+	if theme == "light" {
+		return 247, 248, 250
+	}
+	return 14, 15, 18
 }

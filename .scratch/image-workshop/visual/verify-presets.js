@@ -38,6 +38,20 @@ function emitEvent(name, payload) {
 }
 window.go = { main: { App: {
   GetTheme: async () => 'dark',
+  SupportedFormatHints: async () => ['JPG', 'PNG', 'WebP', 'BMP', 'TIFF', 'GIF（静态）'],
+  // 真实判定在 Go（internal/service/batch_service.go 的 validateBatchStart）；
+  // 这里只是替身，让假绑定能给出与之一致的【结果】，不在前端复制规则。
+  ValidateImageRules: async (rules) => {
+    const t = (rules && rules.target_bytes) || 0;
+    const w = (rules && rules.max_width) || 0;
+    const h = (rules && rules.max_height) || 0;
+    const fmt = (rules && rules.output_format) || 'keep';
+    if (t !== 0 && (t < 1024 || t > 1073741824)) return '目标体积需在 1 KB–1 GB';
+    if ((w === 0) !== (h === 0)) return '宽高需同时设置';
+    if (w !== 0 && (w > 65535 || h > 65535)) return '宽高需在 1–65535 px';
+    if (fmt === 'keep' && t === 0 && w === 0) return '请选择输出格式，或开启目标体积/尺寸限制';
+    return '';
+  },
   SetTheme: async () => {},
   ScanPaths: async (paths, skip) => ({
     files: [

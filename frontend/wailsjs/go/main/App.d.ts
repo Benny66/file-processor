@@ -50,4 +50,8 @@ export function SelectSaveFile(arg1:string,arg2:string):Promise<string>;
 
 export function SetTheme(arg1:string):Promise<void>;
 
+export function SupportedFormatHints():Promise<Array<string>>;
+
 export function TrayAvailable():Promise<boolean>;
+
+export function ValidateImageRules(arg1:service.BatchRules):Promise<string>;

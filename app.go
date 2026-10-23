@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"sync/atomic"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -31,10 +32,14 @@ type App struct {
 	cfg      *config.Config
 	trayStop func()
 
-	// trayAlive 表示系统托盘是否真的注册成功（麒麟等环境可能没有 StatusNotifierWatcher）。
-	// quitting 表示本次关闭来自托盘退出等主动退出路径，不应再被「关到托盘」拦截。
-	trayAlive bool
-	quitting  bool
+	// trayAlive 表示托盘线程是否真的在跑：只有平台声明支持（tray.Supported()）
+	// 且注册未报错才为 true。quitting 表示本次关闭来自托盘「退出」等主动退出路径，
+	// 不应再被「关到托盘」拦截。
+	//
+	// 两者用 atomic.Bool：quitting 由托盘回调 goroutine 写、beforeClose 由 Wails
+	// 的事件循环读，普通 bool 跨 goroutine 读写是数据竞争（-race 下会报）。
+	trayAlive atomic.Bool
+	quitting  atomic.Bool
 }
 
 // NewApp 创建应用实例，注入服务聚合与配置（由 main.go 完成组合根组装）。
@@ -46,6 +51,13 @@ func NewApp(svc *service.Service, cfg *config.Config) *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 
+	// 平台不支持托盘时【不启动托盘线程】：麒麟的注册失败不会回传错误，
+	// 与其依赖一个无法验证的状态，不如按 D-30 直接走「关闭即退出」。
+	if !tray.Supported() {
+		slog.Info("本平台不启用系统托盘，关闭窗口将直接退出")
+		return
+	}
+
 	// 启动系统托盘（独立 goroutine）
 	stop, err := tray.Start(tray.Options{
 		Icon:    trayIcon(),
@@ -56,22 +68,22 @@ func (a *App) startup(ctx context.Context) {
 			runtime.WindowUnminimise(a.ctx)
 		},
 		OnQuit: func() {
-			a.quitting = true
+			a.quitting.Store(true)
 			runtime.Quit(a.ctx)
 		},
 	})
 	if err != nil {
-		slog.Error("启动托盘失败", "err", err)
-	} else {
-		a.trayStop = stop
-		a.trayAlive = true
+		slog.Error("启动托盘失败，关闭窗口将改为直接退出", "err", err)
+		return
 	}
+	a.trayStop = stop
+	a.trayAlive.Store(true)
 }
 
 // hideOnCloseRequested 决定「关闭窗口」是否应隐藏到托盘。
 // 托盘不可用时必须真退出：否则窗口隐藏后没有任何入口能找回应用（001 验收）。
 func (a *App) hideOnCloseRequested() bool {
-	return a.trayAlive && !a.quitting
+	return a.trayAlive.Load() && !a.quitting.Load()
 }
 
 // beforeClose 是 Wails 的 OnBeforeClose：能藏到托盘就藏，否则放行真退出。
@@ -173,7 +185,22 @@ func (a *App) RenderPreview(path string, maxEdge int) (imageproc.Preview, error)
 	return a.svc.RenderPreview(path, maxEdge)
 }
 
-// ProcessBatch 转换一批图片，期间推送进度事件，结束后推送完成事件。
+// ValidateImageRules 在发起批次之前预检规则，返回可直接展示的提示文案；合法时返回空串。
+// 判定与文案的单一真相都在 service，前端不再比较大小、也不再抄一份提示。
+func (a *App) ValidateImageRules(rules service.BatchRules) string {
+	return a.svc.ValidateImageRules(rules)
+}
+
+// SupportedFormatHints 返回可导入格式的展示清单（单一真相在 imageproc.supportedFormats）。
+func (a *App) SupportedFormatHints() []string {
+	return imageproc.SupportedFormatHints()
+}
+
+// ProcessBatch 转换一批图片，期间推送进度事件。
+//
+// 结果【不另发事件】：绑定调用的返回值已经是完整的 BatchResult，再发一个
+// `image:done` 就是同一件事两条投递路径——前端只可能订其中一条，另一条静默空转
+// （005→011 累计审查即发现 done 无人订阅，见护栏 TestEmittedEventsHaveSubscribers）。
 func (a *App) ProcessBatch(req service.BatchRequest) (service.BatchResult, error) {
 	result, err := a.svc.ProcessBatch(req, func(p service.BatchProgress) {
 		if a.ctx != nil {
@@ -182,9 +209,6 @@ func (a *App) ProcessBatch(req service.BatchRequest) (service.BatchResult, error
 	})
 	if err != nil {
 		return result, err
-	}
-	if a.ctx != nil {
-		runtime.EventsEmit(a.ctx, event.Name("image", event.ActionDone), result)
 	}
 	return result, nil
 }
@@ -227,7 +251,7 @@ func (a *App) SaveImageSettings(rules service.BatchRules) error {
 // TrayAvailable 告诉前端当前是否能把窗口隐藏到托盘。
 // 标题栏的关闭按钮据此在「隐藏」与「退出」之间选择（托盘不可用时隐藏等于丢窗口）。
 func (a *App) TrayAvailable() bool {
-	return a.trayAlive
+	return a.trayAlive.Load()
 }
 
 // ---------------------------------------------------------------------------

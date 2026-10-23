@@ -64,7 +64,10 @@ if [ -z "$MODULE" ]; then
   echo "错误：无法从 go.mod 读取 module 路径" >&2
   exit 1
 fi
-COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
+# 提交号可由外部传入：容器内构建（build-linux-container.sh 打的 tar 排除了 .git）
+# 拿不到 git，若不外部提供，麒麟 .deb 里的二进制就没有提交号。
+# 注入逻辑仍然只在本脚本这一处。
+COMMIT="${BUILD_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || true)}"
 LDFLAGS="-X ${MODULE}/internal/appinfo.InjectedVersion=${VERSION}"
 if [ -n "$COMMIT" ]; then
   LDFLAGS="${LDFLAGS} -X ${MODULE}/internal/appinfo.InjectedCommit=${COMMIT}"

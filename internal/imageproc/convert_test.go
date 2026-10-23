@@ -187,6 +187,36 @@ func TestConvertFlattensAlphaToWhiteForJPEG(t *testing.T) {
 	if redPixel.R < 200 || redPixel.G > 60 || redPixel.B > 60 {
 		t.Errorf("不透明红色区域失真：%v", redPixel)
 	}
+	// US-20：铺白这个事实必须【回传】，否则前端给不出「透明背景已铺白」的提示。
+	if !got.AlphaFlattened {
+		t.Errorf("透明图转 JPEG 未标记 AlphaFlattened —— 队列提示将没有依据")
+	}
+}
+
+// TestConvertAlphaFlattenedOnlyWhenActuallyTransparent 防止把提示做成无条件噪声：
+// 不透明源转 JPEG 不该标记铺白。
+func TestConvertAlphaFlattenedOnlyWhenActuallyTransparent(t *testing.T) {
+	src := image.NewNRGBA(image.Rect(0, 0, 8, 8))
+	for y := 0; y < 8; y++ {
+		for x := 0; x < 8; x++ {
+			src.SetNRGBA(x, y, color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+		}
+	}
+	got, err := Convert(encodeForTest(t, "png", src), "solid.png", ConvertOptions{Format: OutputJPEG})
+	if err != nil {
+		t.Fatalf("Convert 失败: %v", err)
+	}
+	if got.AlphaFlattened {
+		t.Errorf("不透明源被标记为已铺白 —— 会在队列里制造无意义的提示")
+	}
+	// 输出保留透明时同样不该标记（铺白只发生在 JPEG）。
+	pngOut, err := Convert(encodeForTest(t, "png", src), "solid.png", ConvertOptions{Format: OutputPNG})
+	if err != nil {
+		t.Fatalf("PNG 转换失败: %v", err)
+	}
+	if pngOut.AlphaFlattened {
+		t.Errorf("PNG 输出被标记为已铺白")
+	}
 }
 
 func TestConvertPreservesAlpha(t *testing.T) {

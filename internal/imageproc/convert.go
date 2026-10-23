@@ -38,13 +38,20 @@ type ConvertOptions struct {
 
 // Converted 是一次转换的结果。
 type Converted struct {
-	Data            []byte
-	Format          string
-	Width           int
-	Height          int
-	Quality         int
+	Data    []byte
+	Format  string
+	Width   int
+	Height  int
+	Quality int
+	// ExtremeDegraded 由目标体积搜索判定（阈值见下方常量），前端只负责展示。
 	ExtremeDegraded bool
+	// AlphaFlattened 表示透明区域被铺了白底（仅 JPEG 输出会出现；US-20 的提示依据）。
+	AlphaFlattened bool
 }
+
+// DefaultQuality 是未指定质量时 JPEG/WebP 的编码质量。
+// 单一真相在此：Convert 与 preview 都引用它，两处各写 85 会漂移。
+const DefaultQuality = 85
 
 // 极端降级阈值（单一真相；结果以布尔标记回传，前端不重复判断）。
 const (
@@ -96,13 +103,22 @@ func Convert(data []byte, path string, opts ConvertOptions) (Converted, error) {
 	if outWidth != p.width || outHeight != p.height {
 		img = resizeImage(img, outWidth, outHeight)
 	}
+	// US-20：透明图转 JPEG 会铺白底（编码发生在 encodeImage 内部），这里只判定
+	// 「这张图确实带透明」并把结论回传给调用方去提示，前端不再自己判断。
+	alphaFlattened := outFormat == OutputJPEG && !isOpaque(img)
+
 	if opts.TargetBytes > 0 {
-		return encodeToTarget(img, outWidth, outHeight, outFormat, opts)
+		converted, err := encodeToTarget(img, outWidth, outHeight, outFormat, opts)
+		if err != nil {
+			return converted, err
+		}
+		converted.AlphaFlattened = alphaFlattened
+		return converted, nil
 	}
 
 	quality := opts.Quality
 	if quality <= 0 {
-		quality = 85
+		quality = DefaultQuality
 	}
 	if outFormat == OutputPNG {
 		quality = 0
@@ -112,12 +128,22 @@ func Convert(data []byte, path string, opts ConvertOptions) (Converted, error) {
 		return Converted{}, err
 	}
 	return Converted{
-		Data:    out,
-		Format:  outFormat,
-		Width:   outWidth,
-		Height:  outHeight,
-		Quality: quality,
+		Data:           out,
+		Format:         outFormat,
+		Width:          outWidth,
+		Height:         outHeight,
+		Quality:        quality,
+		AlphaFlattened: alphaFlattened,
 	}, nil
+}
+
+// isOpaque 判断图像是否完全不透明（带 alpha 通道且有半透明像素时为 false）。
+// 走标准库的 Opaque()（*image.RGBA / *image.NRGBA 都实现了），不在前端重复一份判断。
+func isOpaque(img image.Image) bool {
+	if o, ok := img.(interface{ Opaque() bool }); ok {
+		return o.Opaque()
+	}
+	return true
 }
 
 func encodeToTarget(img image.Image, width, height int, format string, opts ConvertOptions) (Converted, error) {

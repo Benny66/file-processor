@@ -42,32 +42,19 @@ else
   }
 fi
 
-VERSION="$(python3 - "$ROOT/wails.json" <<'PY'
-import json, sys
-print(json.load(open(sys.argv[1]))["info"]["productVersion"])
-PY
-)"
+# 字段读取统一走 scripts/wails-info.sh：本脚本曾在 CI 的 ubuntu:20.04 容器里
+# 用 python3 解析 wails.json，而该镜像没有 python3（set -e 下 127 退出）。
+VERSION="$(bash scripts/wails-info.sh info.productVersion)"
 if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+){2,3}$'; then
   echo "错误：版本 '$VERSION' 不是数字点分格式" >&2
   exit 1
 fi
 
-DISPLAY_NAME="$(python3 - "$ROOT/wails.json" <<'PY'
-import json, sys
-print(json.load(open(sys.argv[1]))["info"].get("productName", "ImageWorkshop"))
-PY
-)"
-COMMENT="$(python3 - "$ROOT/wails.json" <<'PY'
-import json, sys
-print(json.load(open(sys.argv[1]))["info"].get("comments", "图片批量处理工具"))
-PY
-)"
-MAINTAINER="$(python3 - "$ROOT/wails.json" <<'PY'
-import json, sys
-a = json.load(open(sys.argv[1])).get("author", {})
-print(f"{a.get('name', 'ImageWorkshop')} <{a.get('email', 'noreply@example.com')}>")
-PY
-)"
+DISPLAY_NAME="$(bash scripts/wails-info.sh info.productName)"
+COMMENT="$(bash scripts/wails-info.sh info.comments)"
+MAINTAINER="$(printf '%s <%s>' \
+  "$(bash scripts/wails-info.sh author.name)" \
+  "$(bash scripts/wails-info.sh author.email)")"
 
 DEB_NAME="${APP_NAME}_${VERSION}_amd64.deb"
 OUT="build/bin/${DEB_NAME}"

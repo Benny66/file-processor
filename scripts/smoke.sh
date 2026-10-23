@@ -15,7 +15,6 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 APP_NAME="$(bash scripts/app-name.sh)"
-WAILS="$(go env GOPATH)/bin/wails"
 DATA_DIR="$HOME/Library/Application Support/${APP_NAME}"   # macOS；其他平台见下方兜底
 
 # 平台相关的二进制路径与数据目录
@@ -49,8 +48,10 @@ cleanup() {
 trap cleanup EXIT
 
 # ---- 1. 构建 ----
+# 统一经 scripts/build.sh：它是版本/提交号注入的唯一入口（护栏
+# TestWailsBuildHasSingleEntryPoint 会拦别的直调），冒烟产物因此带上真实版本。
 echo "==> 构建 ${APP_NAME} ..."
-"$WAILS" build -tags nodynamic >/dev/null 2>&1
+bash scripts/build.sh -tags nodynamic >/dev/null 2>&1
 
 if [ ! -f "$BIN" ]; then
   echo "错误：构建产物不存在 $BIN" >&2

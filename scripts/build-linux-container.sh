@@ -41,7 +41,10 @@ docker build -t "$IMAGE" -f build/linux/Dockerfile build/linux
 echo "==> 容器内交叉/原生构建 linux/amd64"
 mkdir -p build/bin
 rm -f "$BIN"
+# 提交号在宿主取（tar 排除了 .git，容器内取不到），交给 build.sh 注入。
+BUILD_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
 docker run --rm \
+  -e BUILD_COMMIT="$BUILD_COMMIT" \
   -v "$ROOT:/src:ro" \
   -v "$ROOT/build/bin:/out" \
   "$IMAGE" bash -c '
@@ -58,7 +61,10 @@ docker run --rm \
       export CGO_LDFLAGS="-fuse-ld=lld"
       export PKG_CONFIG_LIBDIR=/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/share/pkgconfig
     fi
-    wails build -platform linux/amd64 -tags nodynamic -s
+    # 必须经 scripts/build.sh：它是版本与提交号注入的【唯一入口】。
+    # 此前这里裸调 wails build，产出的二进制 appinfo.Resolve() 恒为 "dev"，
+    # 而 .deb 的 control 写着 0.1.0 —— 同一版本两个真相且没有任何症状。
+    bash scripts/build.sh -platform linux/amd64 -tags nodynamic -s
     cp build/bin/ImageWorkshop /out/ImageWorkshop
   '
 

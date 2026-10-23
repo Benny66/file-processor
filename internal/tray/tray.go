@@ -1,13 +1,15 @@
 // Package tray 封装系统托盘。
 //
-// 平台支持：
-//   - Windows / Linux：使用 energye/systray（getlantern 的 fork，提供
-//     RunWithExternalLoop 让托盘与 Wails 主事件循环共存）。
-//   - macOS：不启动托盘（Wails v2 的 NSApplication delegate 与所有 systray
-//     库冲突——库都想当 delegate 来创建 NSStatusBar，而 Wails 自己占着 delegate，
-//     导致链接期符号冲突与运行时崩溃）。见 start_darwin.go 的 no-op 实现。
+// 平台能力由 Supported() 声明，它是**关闭语义的唯一输入**：
+//   - Windows：Supported()=true，关闭窗口隐藏到托盘（US-34）。
+//   - macOS：Supported()=false（Wails v2 的 NSApplication delegate 被 frontend 占住，
+//     与所有 systray 库互斥），关闭窗口即退出。
+//   - Linux/麒麟：Supported()=false，直到 001 真机确认 D-Bus StatusNotifierWatcher
+//     在位为止；D-30 的口径是「托盘未验证可用时关闭即退出」。
 //
-// 本文件只定义共享类型，平台实现见 start_windows_linux.go / start_darwin.go。
+// 每个平台必须在 supported_<goos>.go 里给出 Supported()——**漏一个平台就编译失败**，
+// 这条缺失本身即护栏（AGENTS.md 铁律 5：无症状的失效要编译成会红的检查）。
+// 托盘线程实现见 start_other.go（非 darwin），darwin 侧是显式失败（start_darwin.go）。
 package tray
 
 // Handlers 是托盘交互回调，由调用方注入。
