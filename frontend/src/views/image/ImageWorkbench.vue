@@ -7,21 +7,58 @@
       </div>
       <div class="workbench__actions">
         <span v-if="items.length > 0" class="workbench__count">{{ items.length }} 项</span>
-        <button class="btn btn--primary" type="button" :disabled="importing" @click="addFiles">
+        <button class="btn btn--primary" type="button" :disabled="busy" @click="addFiles">
           {{ importing ? '扫描中…' : '添加文件' }}
         </button>
-        <button class="btn" type="button" :disabled="importing" @click="addFolder">添加文件夹</button>
+        <button class="btn" type="button" :disabled="busy" @click="addFolder">添加文件夹</button>
         <button
           v-if="items.length > 0"
           class="btn btn--danger"
           type="button"
-          :disabled="importing"
+          :disabled="busy"
           @click="clearQueue"
         >
           清空
         </button>
       </div>
     </header>
+
+    <div v-if="items.length > 0" class="rules">
+      <label class="field" for="output-format">
+        <span class="field__label">输出格式</span>
+        <select
+          id="output-format"
+          class="select"
+          :value="outputFormat"
+          :disabled="busy"
+          @change="onFormatChange"
+        >
+          <option v-for="option in formatOptions" :key="option.value" :value="option.value">
+            {{ option.label }}
+          </option>
+        </select>
+      </label>
+      <button class="btn btn--primary" type="button" :disabled="!canStart" @click="startBatch">
+        {{ processing ? '处理中…' : '开始处理' }}
+      </button>
+      <button v-if="processing" class="btn" type="button" :disabled="canceling" @click="cancelBatch">
+        {{ canceling ? '取消中…' : '取消' }}
+      </button>
+      <span v-if="processing" class="rules__progress">{{ processed }} / {{ total }}</span>
+    </div>
+    <p v-if="items.length > 0 && outputFormat === OutputFormat.Keep" class="rules__hint">
+      当前切片只做格式转换；保持原格式需配合目标体积或尺寸规则（后续）。
+    </p>
+    <div
+      v-if="processing"
+      class="progress"
+      role="progressbar"
+      :aria-valuenow="processed"
+      aria-valuemin="0"
+      :aria-valuemax="total"
+    >
+      <div class="progress__bar" :style="{ width: progressPercent + '%' }" />
+    </div>
 
     <p v-if="actionError" class="workbench__error" role="alert">
       [{{ actionError.code }}] {{ actionError.message }}
@@ -30,6 +67,12 @@
     <div v-if="importNote" class="notice" role="status" :title="importNote.detail">
       <span class="notice__text">{{ importNote.text }}</span>
       <button class="notice__close" type="button" aria-label="关闭导入提示" @click="dismissNote">
+        ×
+      </button>
+    </div>
+    <div v-if="batchSummary" class="notice" role="status">
+      <span class="notice__text">{{ batchSummary }}</span>
+      <button class="notice__close" type="button" aria-label="关闭处理结果" @click="dismissSummary">
         ×
       </button>
     </div>
@@ -45,7 +88,7 @@
         v-for="item in items"
         :key="item.path"
         :item="item"
-        :busy="importing"
+        :busy="busy"
         @inspect="requestInspect"
         @remove="removeItem"
       />
@@ -54,12 +97,24 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { InspectImage, ScanPaths, SelectDirectory, SelectFiles } from '../../../wailsjs/go/main/App'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import {
+  CancelBatch,
+  InspectImage,
+  ProcessBatch,
+  ScanPaths,
+  SelectDirectory,
+  SelectFiles,
+} from '../../../wailsjs/go/main/App'
+import { service } from '../../../wailsjs/go/models'
+import { useEvent } from '../../composables/useEvent'
+import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
+import { OutputFormat, type OutputFormatValue } from '../../lib/image'
 import { logError, logInfo, logWarn } from '../../lib/log'
+import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
-import type { QueueItem, ScanResult } from './types'
+import type { BatchResult, ImageProgress, ItemResult, QueueItem, ScanResult } from './types'
 
 const supportedFormats = 'JPG / PNG / WebP / BMP / TIFF / GIF（静态）'
 
@@ -72,6 +127,30 @@ const items = ref<QueueItem[]>([])
 const importing = ref(false)
 const importNote = ref<ImportNote | null>(null)
 const actionError = ref<AppError | null>(null)
+const outputFormat = ref<OutputFormatValue>(OutputFormat.Keep)
+const processing = ref(false)
+const canceling = ref(false)
+const processed = ref(0)
+const total = ref(0)
+const batchSummary = ref<string | null>(null)
+
+const busy = computed(() => importing.value || processing.value)
+const canStart = computed(
+  () =>
+    items.value.some((item) => !item.error) &&
+    !busy.value &&
+    outputFormat.value !== OutputFormat.Keep &&
+    !items.value.some((item) => item.inspecting),
+)
+const progressPercent = computed(() =>
+  total.value > 0 ? Math.round((processed.value / total.value) * 100) : 0,
+)
+const formatOptions: { value: OutputFormatValue; label: string }[] = [
+  { value: OutputFormat.Keep, label: '保持原格式' },
+  { value: OutputFormat.JPEG, label: 'JPEG' },
+  { value: OutputFormat.PNG, label: 'PNG' },
+  { value: OutputFormat.WebP, label: 'WebP' },
+]
 
 let unregisterDrop: (() => void) | null = null
 let disposed = false
@@ -83,6 +162,17 @@ let inspecting = false
 function currentQueuePaths(): string[] {
   return items.value.map((item) => item.path)
 }
+
+function applyItemResult(result: ItemResult) {
+  const item = items.value.find((entry) => entry.path === result.path)
+  if (item) item.result = result
+}
+
+useEvent<ImageProgress>(eventName('image', EventAction.Progress), (progress) => {
+  processed.value = progress.done
+  total.value = progress.total
+  if (progress.current) applyItemResult(progress.current)
+})
 
 function requestInspect(path: string) {
   const item = items.value.find((entry) => entry.path === path)
@@ -140,10 +230,11 @@ function scanNote(result: ScanResult, added: number): ImportNote {
 }
 
 async function importPaths(paths: string[]) {
-  if (importing.value || paths.length === 0) return
+  if (busy.value || paths.length === 0) return
   importing.value = true
   actionError.value = null
   importNote.value = null
+  batchSummary.value = null
   try {
     const result = await invoke(() => ScanPaths(paths, currentQueuePaths()), 'ScanPaths')
     const added: QueueItem[] = result.files.map((file) => ({
@@ -151,6 +242,7 @@ async function importPaths(paths: string[]) {
       info: null,
       error: null,
       inspecting: false,
+      result: null,
     }))
     if (added.length > 0) {
       items.value = items.value.concat(added)
@@ -167,6 +259,85 @@ async function importPaths(paths: string[]) {
   } finally {
     importing.value = false
   }
+}
+
+function summaryText(result: BatchResult): string {
+  const parts = [`成功 ${result.success}`, `失败 ${result.failed}`]
+  if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
+  if (result.canceled > 0) parts.push(`取消 ${result.canceled}`)
+  let text = `处理完成：${parts.join('、')}`
+  if (result.saved_bytes > 0) {
+    text += `；累计节省 ${formatBytes(result.saved_bytes)}`
+  } else if (result.saved_bytes < 0) {
+    text += `；累计增加 ${formatBytes(-result.saved_bytes)}`
+  }
+  return text
+}
+
+function applyBatchResult(result: BatchResult) {
+  for (const item of result.items) applyItemResult(item)
+  processed.value = result.items.length
+  total.value = result.items.length
+  batchSummary.value = summaryText(result)
+  logInfo('批量处理完成', {
+    success: result.success,
+    failed: result.failed,
+    canceled: result.canceled,
+  })
+}
+
+async function startBatch() {
+  if (!canStart.value) return
+  const batchPaths = items.value.filter((item) => !item.error).map((item) => item.path)
+  if (batchPaths.length === 0) return
+  processing.value = true
+  canceling.value = false
+  processed.value = 0
+  total.value = batchPaths.length
+  batchSummary.value = null
+  actionError.value = null
+  importNote.value = null
+  for (const item of items.value) item.result = null
+  try {
+    const request = new service.BatchRequest({
+      paths: batchPaths,
+      rules: {
+        output_format: outputFormat.value,
+        target_bytes: 0,
+        max_width: 0,
+        max_height: 0,
+      },
+    })
+    const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
+    applyBatchResult(result)
+  } catch (e) {
+    actionError.value = e as AppError
+    logError('批量处理失败', e)
+  } finally {
+    processing.value = false
+    canceling.value = false
+  }
+}
+
+async function cancelBatch() {
+  if (!processing.value || canceling.value) return
+  canceling.value = true
+  try {
+    await invoke(() => CancelBatch(), 'CancelBatch')
+    logInfo('已请求取消批次')
+  } catch (e) {
+    canceling.value = false
+    actionError.value = e as AppError
+    logError('取消批次失败', e)
+  }
+}
+
+function onFormatChange(event: Event) {
+  outputFormat.value = (event.target as HTMLSelectElement).value as OutputFormatValue
+}
+
+function dismissSummary() {
+  batchSummary.value = null
 }
 
 async function addFiles() {
@@ -190,6 +361,7 @@ async function addFolder() {
 }
 
 function removeItem(path: string) {
+  if (busy.value) return
   items.value = items.value.filter((item) => item.path !== path)
 }
 
@@ -198,11 +370,14 @@ function dismissNote() {
 }
 
 function clearQueue() {
-  if (importing.value) return
+  if (busy.value) return
   items.value = []
   inspectQueue.length = 0
   queuedForInspect.clear()
   importNote.value = null
+  batchSummary.value = null
+  processed.value = 0
+  total.value = 0
   actionError.value = null
 }
 
@@ -280,6 +455,77 @@ onUnmounted(() => {
   margin: 0;
   color: var(--color-danger);
   font-size: var(--font-size-sm);
+}
+
+.rules {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field__label {
+  color: var(--text-2);
+  font-size: var(--font-size-sm);
+}
+
+.select {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-raised);
+  color: var(--text-1);
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--color-primary-border);
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.rules__progress {
+  color: var(--text-2);
+  font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.rules__hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-size-xs);
+}
+
+.progress {
+  flex: none;
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+}
+
+.progress__bar {
+  height: 100%;
+  background: var(--color-primary);
+  transition: width var(--motion-fast) var(--ease-standard);
 }
 
 .btn {

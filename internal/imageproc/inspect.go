@@ -40,19 +40,24 @@ type Info struct {
 	Warning   string `json:"warning,omitempty"`
 }
 
-// Inspect 处理图片字节并生成方向归一后的缩略图；path 仅用于展示与扩展名提示。
-// 动图、损坏、超限返回可读的 apperr，不生成缩略图。
-func Inspect(data []byte, path string) (Info, error) {
+// preparedImage 是检查与转换共用的解码结果（方向已归一）。
+type preparedImage struct {
+	format   string
+	width    int
+	height   int
+	img      image.Image
+	warnings []string
+}
+
+func prepareImage(data []byte, path string) (*preparedImage, error) {
 	if int64(len(data)) > MaxFileBytes {
-		return Info{}, apperr.Validation("图片超过 512 MB 上限")
+		return nil, apperr.Validation("图片超过 512 MB 上限")
 	}
 
 	format := detectContentFormat(data)
 	if format == "" {
-		return Info{}, apperr.Validation("无法识别的图片格式")
+		return nil, apperr.Validation("无法识别的图片格式")
 	}
-	info := Info{Path: path, Format: format, Bytes: int64(len(data))}
-
 	var warnings []string
 	if extFormat := FormatFromPath(path); extFormat != "" && extFormat != format {
 		warnings = append(warnings, fmt.Sprintf(
@@ -63,10 +68,10 @@ func Inspect(data []byte, path string) (Info, error) {
 	}
 
 	if format == "gif" && isAnimatedGIF(data) {
-		return Info{}, apperr.Validation("首版不支持动图")
+		return nil, apperr.Validation("首版不支持动图")
 	}
 	if format == "webp" && isAnimatedWebP(data) {
-		return Info{}, apperr.Validation("首版不支持动图")
+		return nil, apperr.Validation("首版不支持动图")
 	}
 
 	orientation, orientErr := parseOrientation(data)
@@ -76,31 +81,51 @@ func Inspect(data []byte, path string) (Info, error) {
 
 	width, height, err := decodeConfig(format, data)
 	if err != nil {
-		return Info{}, apperr.Validation("无法解码图片，文件可能已损坏")
+		return nil, apperr.Validation("无法解码图片，文件可能已损坏")
 	}
 	if int64(width)*int64(height) > MaxPixels {
-		return Info{}, apperr.Validation("图片超过 100 MP 上限")
+		return nil, apperr.Validation("图片超过 100 MP 上限")
 	}
 	if orientation >= 5 && orientation <= 8 {
 		width, height = height, width
 	}
-	info.Width, info.Height = width, height
 
 	img, err := decodeImage(format, data)
 	if err != nil {
-		return Info{}, apperr.Validation("无法解码图片，文件可能已损坏")
+		return nil, apperr.Validation("无法解码图片，文件可能已损坏")
 	}
 	if orientation > 1 {
 		img = applyOrientation(img, orientation)
 	}
+	return &preparedImage{
+		format:   format,
+		width:    width,
+		height:   height,
+		img:      img,
+		warnings: warnings,
+	}, nil
+}
 
-	thumbnail, err := makeThumbnail(img, ThumbnailMaxEdge)
+// Inspect 处理图片字节并生成方向归一后的缩略图；path 仅用于展示与扩展名提示。
+// 动图、损坏、超限返回可读的 apperr，不生成缩略图。
+func Inspect(data []byte, path string) (Info, error) {
+	p, err := prepareImage(data, path)
+	if err != nil {
+		return Info{}, err
+	}
+	thumbnail, err := makeThumbnail(p.img, ThumbnailMaxEdge)
 	if err != nil {
 		return Info{}, apperr.Wrap(err)
 	}
-	info.Thumbnail = thumbnail
-	info.Warning = strings.Join(warnings, "；")
-	return info, nil
+	return Info{
+		Path:      path,
+		Format:    p.format,
+		Width:     p.width,
+		Height:    p.height,
+		Bytes:     int64(len(data)),
+		Thumbnail: thumbnail,
+		Warning:   strings.Join(p.warnings, "；"),
+	}, nil
 }
 
 func detectContentFormat(data []byte) string {

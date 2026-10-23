@@ -2,28 +2,33 @@
   <li ref="root" class="row">
     <div
       class="thumb"
-      :class="{ 'thumb--failed': item.error, 'thumb--pending': !item.info && !item.error }"
+      :class="{ 'thumb--failed': hasFailure, 'thumb--pending': !item.info && !hasFailure }"
     >
       <img v-if="item.info" :src="item.info.thumbnail" alt="" />
-      <span v-else class="thumb__mark" aria-hidden="true">{{ item.error ? '!' : '…' }}</span>
+      <span v-else class="thumb__mark" aria-hidden="true">{{ hasFailure ? '!' : '…' }}</span>
     </div>
 
     <div class="row__main">
       <p class="row__name" :title="item.path">{{ item.name }}</p>
       <div class="row__meta">
         <span class="row__path" :title="item.path">{{ item.path }}</span>
-        <template v-if="item.info">
-          <span class="row__sep">·</span>
-          <span class="row__dims">{{ item.info.width }} × {{ item.info.height }}</span>
-          <span class="row__sep">·</span>
-          <span class="row__format">{{ formatLabel(item.info.format) }}</span>
+        <template v-if="dimensions || item.info">
+          <span v-if="dimensions" class="row__sep">·</span>
+          <span v-if="dimensions" class="row__dims">{{ dimensions }}</span>
+          <template v-if="item.info">
+            <span class="row__sep">·</span>
+            <span class="row__format">{{ formatLabel(item.info.format) }}</span>
+          </template>
         </template>
       </div>
-      <p v-if="item.error" class="row__error" :title="item.error">{{ item.error }}</p>
+      <p v-if="error" class="row__error" :title="error">{{ error }}</p>
       <p v-else-if="warning" class="row__warning" :title="warning">{{ warning }}</p>
     </div>
 
-    <span class="row__size">{{ formatBytes(item.size) }}</span>
+    <div class="row__sizes">
+      <span class="row__size">{{ formatBytes(item.size) }}</span>
+      <span v-if="outputSize" class="row__output">→ {{ outputSize }}</span>
+    </div>
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
@@ -33,6 +38,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { ItemStatus } from '../../lib/image'
+import { formatBytes } from './format'
 import type { QueueItem } from './types'
 
 const props = defineProps<{ item: QueueItem; busy: boolean }>()
@@ -45,6 +52,19 @@ const root = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
 
 const statusLabel = computed(() => {
+  const result = props.item.result
+  if (result) {
+    switch (result.status) {
+      case ItemStatus.Success:
+        return '成功'
+      case ItemStatus.Failed:
+        return '失败'
+      case ItemStatus.Skipped:
+        return '已跳过'
+      case ItemStatus.Canceled:
+        return '已取消'
+    }
+  }
   if (props.item.inspecting) return '检查中'
   if (props.item.error) return '失败'
   if (props.item.info) return '可处理'
@@ -52,26 +72,59 @@ const statusLabel = computed(() => {
 })
 
 const statusClass = computed(() => {
+  const result = props.item.result
+  if (result) {
+    switch (result.status) {
+      case ItemStatus.Success:
+        return 'row__status--ok'
+      case ItemStatus.Failed:
+        return 'row__status--failed'
+      case ItemStatus.Skipped:
+        return 'row__status--skipped'
+      case ItemStatus.Canceled:
+        return 'row__status--canceled'
+    }
+  }
   if (props.item.error) return 'row__status--failed'
   if (props.item.inspecting) return 'row__status--busy'
   if (props.item.info) return 'row__status--ok'
   return ''
 })
 
-const warning = computed(() => props.item.info?.warning ?? '')
+const hasFailure = computed(
+  () => props.item.result?.status === ItemStatus.Failed || !!props.item.error,
+)
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
+const error = computed(() => {
+  if (props.item.result?.status === ItemStatus.Failed) {
+    return props.item.result.message || '处理失败'
   }
-  return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unit]}`
-}
+  return props.item.error ?? ''
+})
+
+const warning = computed(() => {
+  if (props.item.result?.status === ItemStatus.Skipped) {
+    return props.item.result.message || '已跳过'
+  }
+  return props.item.info?.warning ?? ''
+})
+
+const dimensions = computed(() => {
+  if (props.item.info) {
+    return `${props.item.info.width} × ${props.item.info.height}`
+  }
+  const result = props.item.result
+  if (result?.status === ItemStatus.Success && result.width > 0) {
+    return `${result.width} × ${result.height}`
+  }
+  return ''
+})
+
+const outputSize = computed(() => {
+  const result = props.item.result
+  if (result?.status !== ItemStatus.Success) return ''
+  return formatBytes(result.output_bytes)
+})
 
 function formatLabel(format: string): string {
   return format.toUpperCase()
@@ -226,11 +279,25 @@ onUnmounted(() => {
   color: var(--color-warning);
 }
 
-.row__size {
+.row__sizes {
   flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.row__size {
   color: var(--text-2);
   font-size: var(--font-size-sm);
   font-variant-numeric: tabular-nums;
+}
+
+.row__output {
+  color: var(--text-2);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .row__status {
@@ -248,6 +315,14 @@ onUnmounted(() => {
 
 .row__status--failed {
   color: var(--color-danger);
+}
+
+.row__status--skipped {
+  color: var(--color-warning);
+}
+
+.row__status--canceled {
+  color: var(--text-3);
 }
 
 .row__status--busy {

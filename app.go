@@ -144,6 +144,28 @@ func (a *App) InspectImage(path string) (imageproc.Info, error) {
 	return a.svc.InspectImage(path)
 }
 
+// ProcessBatch 转换一批图片，期间推送进度事件，结束后推送完成事件。
+func (a *App) ProcessBatch(req service.BatchRequest) (service.BatchResult, error) {
+	result, err := a.svc.ProcessBatch(req, func(p service.BatchProgress) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, event.Name("image", event.ActionProgress), p)
+		}
+	})
+	if err != nil {
+		return result, err
+	}
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, event.Name("image", event.ActionDone), result)
+	}
+	return result, nil
+}
+
+// CancelBatch 请求取消当前批次；未开始的项会标记为已取消。
+func (a *App) CancelBatch() error {
+	a.svc.CancelBatch()
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // 绑定方法：配置
 // ---------------------------------------------------------------------------

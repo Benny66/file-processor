@@ -10,10 +10,10 @@
 
 ## 涉及层
 
-- [ ] 数据层：输出文件与同目录临时文件；无数据库。
-- [ ] 逻辑层：`imageproc` 编码 JPEG/PNG/WebP；EXIF 方向归一；JPEG 透明铺白；输出全新编码以剥离 EXIF/GPS/ICC；默认质量 85；service 提供 `ProcessBatch`/`CancelBatch`，默认 2 个 worker，输出命名 `-out`/`-out-N`，原子写入，进度/结束事件，单张失败继续，批次汇总与节省体积；绑定层错误走 `apperr`。
-- [ ] UI 层：输出格式选择（保持原格式/JPEG/PNG/WebP）；开始/取消；逐项状态；进度条；批次汇总；失败原因；处理中禁用队列编辑；基础结果状态。
-- [ ] 测试：格式互转；方向；alpha；元数据剥离；输出命名与冲突；源文件字节不变；失败继续；取消；事件契约；中文路径；前端手动验证。
+- [x] 数据层：输出文件与同目录临时文件；无数据库。
+- [x] 逻辑层：`imageproc` 编码 JPEG/PNG/WebP；EXIF 方向归一；JPEG 透明铺白；输出全新编码以剥离 EXIF/GPS/ICC；默认质量 85；service 提供 `ProcessBatch`/`CancelBatch`，默认 2 个 worker，输出命名 `-out`/`-out-N`，原子写入，进度/结束事件，单张失败继续，批次汇总与节省体积；绑定层错误走 `apperr`。
+- [x] UI 层：输出格式选择（保持原格式/JPEG/PNG/WebP）；开始/取消；逐项状态；进度条；批次汇总；失败原因；处理中禁用队列编辑；基础结果状态。
+- [x] 测试：格式互转；方向；alpha；元数据剥离；输出命名与冲突；源文件字节不变；失败继续；取消；事件契约；中文路径；前端手动验证。
 
 ## 验收标准
 
@@ -30,7 +30,22 @@
 
 ## 完成记录
 
-- 状态：待开始
+- 状态：完成（2026-10-23）
 - 实现说明：
+  - 转换引擎：`imageproc` 新增 Output* 常量、`Convert`、`NormalizeOutputFormat`、JPEG 白底铺平、PNG/WebP 编码与方向归一；保持原格式时 JPEG/PNG/WebP 沿用，BMP/TIFF/静态 GIF 落 PNG；输出为全新编码，不带 EXIF/GPS/ICC。
+  - 批次：`service` 新增 BatchRules/Request/Result/ItemStatus；`ProcessBatch` 使用 2 个 worker、取消标记、进度回调；输出先写同目录临时文件，再用硬链接以不覆盖方式落位；单张失败继续；汇总成功/失败/跳过/取消与节省体积；目标体积/尺寸非零时明确拒绝（后续切片实现）。
+  - 前端：输出格式选择、开始/取消、进度条、批次汇总、逐行成功/失败/取消与输出体积；检查阶段已失败的项不进入批次、保持失败状态；处理中禁用导入/移除/清空；使用 `useEvent(eventName('image', EventAction.Progress))` 消费进度。
+  - 契约：OutputFormat 与 ItemStatus 前端镜像在 `lib/image.ts`，已加入 `parity_test.go`；Wails bindings/models 重新生成；构建继续统一 `nodynamic`。
 - 验收证据：
+  - `go test -tags nodynamic ./internal/imageproc ./internal/service -count=1` 通过：格式互转、keep 回落 PNG、方向、JPEG 白底、PNG/WebP 透明、元数据剥离、动图拒绝；输出 `-out`/`-out-2`、源文件不变、无临时文件、失败继续、取消剩余、非法规则拒绝、进度回调。
+  - `make test`、`make lint`、`make build`、`make smoke`、`make verify-gen` 全部通过；镜像护栏包含“图片输出格式/图片处理状态”两项。
+  - Playwright 1280×900（真实构建产物 + 假绑定）：选择 JPEG 后开始处理；进度显示 1/3、33%；完成后汇总“成功 3、失败 0；累计节省 1.2 MB”；3 个成功行显示输出体积，检查阶段失败的动图保持“失败/首版不支持动图”且未被计入批次；扩展名 warning 保留。截图：`.scratch/image-workshop/evidence/imageworkshop-batch-progress-1280.png` 与 `imageworkshop-batch-1280.png`；复现脚本：`.scratch/image-workshop/visual/verify-batch.js`。
+  - 批次行为由真实文件测试覆盖（含取消与不覆盖）；页面视觉使用假绑定；实际 app 启动/配置/DB 由 smoke 覆盖。
 - 偏离与遗留：
+  - 目标体积与尺寸规则未实现（007/008）；服务对非零目标规则明确报错，UI 只提供格式选择；保持原格式在本切片禁用并提示。
+  - `skipped` 状态已定义但 006 不产生；留给“已达标”规则。
+  - 输出落位依赖硬链接；APFS/NTFS/ext4 支持，若目标文件系统不支持则该项失败且不留临时文件。
+  - 批次汇总只统计进入批次的项；检查阶段已失败项保持失败但不计入批次汇总，这是“沿用失败状态并被跳过”的实现。
+  - 队列状态仍是页面本地状态，路由切换会丢失；作为后续审计项。
+  - 真实 app 中带真实图片的批次视觉点验留给 012；本切片通过真实文件测试 + 假绑定视觉 + build/smoke 验收。
+  - 未运行 `make dev`；build/smoke/verify-gen 已覆盖 `nodynamic`。

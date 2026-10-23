@@ -8,6 +8,9 @@
 package service
 
 import (
+	"context"
+	"sync"
+
 	"gorm.io/gorm"
 )
 
@@ -15,6 +18,11 @@ import (
 // 由启动时初始化并注入 App，App 不再直接持有 *gorm.DB。
 type Service struct {
 	db *gorm.DB
+
+	// 批次互斥状态：同一时间只允许一个批次；取消由 CancelBatch 触发。
+	batchMu      sync.Mutex
+	batchCancel  context.CancelFunc
+	batchRunning bool
 }
 
 // New 创建服务聚合，注入数据库连接。

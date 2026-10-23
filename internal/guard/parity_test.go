@@ -69,6 +69,22 @@ func TestFrontendMirrorsMatchGoSourceOfTruth(t *testing.T) {
 			tsObject: "AppEvent",
 			goPrefix: "Action",
 		},
+		{
+			// 图片输出格式（internal/imageproc 的 Output*）
+			name:     "图片输出格式",
+			goPkg:    "internal/imageproc",
+			tsFile:   "frontend/src/lib/image.ts",
+			tsObject: "OutputFormat",
+			goPrefix: "Output",
+		},
+		{
+			// 图片处理状态（internal/service 的 Status*）
+			name:     "图片处理状态",
+			goPkg:    "internal/service",
+			tsFile:   "frontend/src/lib/image.ts",
+			tsObject: "ItemStatus",
+			goPrefix: "Status",
+		},
 	}
 
 	root := projectRoot()

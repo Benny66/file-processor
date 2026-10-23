@@ -4,6 +4,8 @@ import {appinfo} from '../models';
 import {imageproc} from '../models';
 import {service} from '../models';
 
+export function CancelBatch():Promise<void>;
+
 export function Confirm(arg1:string,arg2:string):Promise<boolean>;
 
 export function ExportDatabase(arg1:string):Promise<void>;
@@ -19,6 +21,8 @@ export function GetTheme():Promise<string>;
 export function InspectImage(arg1:string):Promise<imageproc.Info>;
 
 export function OpenDataDir():Promise<void>;
+
+export function ProcessBatch(arg1:service.BatchRequest):Promise<service.BatchResult>;
 
 export function ScanPaths(arg1:Array<string>,arg2:Array<string>):Promise<service.ScanResult>;
 
