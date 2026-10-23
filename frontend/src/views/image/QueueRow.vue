@@ -30,6 +30,7 @@
       <span v-if="outputSize" class="row__output">→ {{ outputSize }}</span>
     </div>
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
+    <span v-if="item.result?.extreme_degraded" class="row__extreme">已明显降质</span>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
     </button>
@@ -327,6 +328,16 @@ onUnmounted(() => {
 
 .row__status--canceled {
   color: var(--text-3);
+}
+
+.row__extreme {
+  flex: none;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--bg-hover);
+  color: var(--color-warning);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
 }
 
 .row__status--busy {

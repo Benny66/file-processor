@@ -30,3 +30,9 @@ export const BoxDimension = {
   Min: 1,
   Max: 65535,
 } as const
+
+/** 目标体积范围（字节）。单一真相在 Go 的 internal/service（TargetBytesMin / TargetBytesMax）。 */
+export const TargetBytes = {
+  Min: 1024,
+  Max: 1073741824,
+} as const

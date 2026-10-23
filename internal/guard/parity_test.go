@@ -94,6 +94,14 @@ func TestFrontendMirrorsMatchGoSourceOfTruth(t *testing.T) {
 			goPrefix: "Box",
 			goSuffix: "Dimension",
 		},
+		{
+			// 目标体积范围（internal/service 的 TargetBytes*）
+			name:     "目标体积范围",
+			goPkg:    "internal/service",
+			tsFile:   "frontend/src/lib/image.ts",
+			tsObject: "TargetBytes",
+			goPrefix: "TargetBytes",
+		},
 	}
 
 	root := projectRoot()

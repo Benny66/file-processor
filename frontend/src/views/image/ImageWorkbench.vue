@@ -76,6 +76,39 @@
         />
         <span class="field__unit">px</span>
       </template>
+      <label class="field field--check">
+        <input
+          type="checkbox"
+          class="checkbox"
+          :checked="targetEnabled"
+          :disabled="busy"
+          @change="onTargetToggle"
+        />
+        <span class="field__label">目标体积</span>
+      </label>
+      <template v-if="targetEnabled">
+        <input
+          id="target-value"
+          class="input input--target"
+          type="number"
+          min="1"
+          step="1"
+          aria-label="目标体积"
+          :value="targetValue"
+          :disabled="busy"
+          @input="onTargetValue"
+        />
+        <select
+          id="target-unit"
+          class="select select--unit"
+          :value="targetUnit"
+          :disabled="busy"
+          @change="onTargetUnit"
+        >
+          <option value="KB">KB</option>
+          <option value="MB">MB</option>
+        </select>
+      </template>
       <button class="btn btn--primary" type="button" :disabled="!canStart" @click="startBatch">
         {{ processing ? '处理中…' : '开始处理' }}
       </button>
@@ -84,11 +117,14 @@
       </button>
       <span v-if="processing" class="rules__progress">{{ processed }} / {{ total }}</span>
     </div>
-    <p v-if="items.length > 0 && sizeBoxEnabled && !sizeBoxValid" class="rules__hint">
+    <p v-if="items.length > 0 && targetEnabled && !targetValid" class="rules__hint">
+      目标体积需在 1 KB–1 GB。
+    </p>
+    <p v-else-if="items.length > 0 && sizeBoxEnabled && !sizeBoxValid" class="rules__hint">
       宽高需为 1–65535 的整数。
     </p>
     <p v-else-if="items.length > 0 && !hasRule" class="rules__hint">
-      请选择输出格式，或开启尺寸限制。
+      请选择输出格式，或开启目标体积/尺寸限制。
     </p>
     <div
       v-if="processing"
@@ -151,7 +187,7 @@ import { service } from '../../../wailsjs/go/models'
 import { useEvent } from '../../composables/useEvent'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, OutputFormat, type OutputFormatValue } from '../../lib/image'
+import { BoxDimension, OutputFormat, TargetBytes, type OutputFormatValue } from '../../lib/image'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
@@ -177,6 +213,9 @@ const batchSummary = ref<string | null>(null)
 const sizeBoxEnabled = ref(false)
 const maxWidth = ref(1920)
 const maxHeight = ref(1080)
+const targetEnabled = ref(false)
+const targetValue = ref(500)
+const targetUnit = ref<'KB' | 'MB'>('KB')
 
 const busy = computed(() => importing.value || processing.value)
 const sizeBoxValid = computed(() => {
@@ -185,8 +224,21 @@ const sizeBoxValid = computed(() => {
     Number.isInteger(value) && value >= BoxDimension.Min && value <= BoxDimension.Max
   return valid(maxWidth.value) && valid(maxHeight.value)
 })
+const targetBytes = computed(() =>
+  targetUnit.value === 'MB' ? targetValue.value * 1024 * 1024 : targetValue.value * 1024,
+)
+const targetValid = computed(() => {
+  if (!targetEnabled.value) return true
+  const bytes = targetBytes.value
+  return (
+    Number.isFinite(bytes) &&
+    Number.isInteger(bytes) &&
+    bytes >= TargetBytes.Min &&
+    bytes <= TargetBytes.Max
+  )
+})
 const hasRule = computed(
-  () => outputFormat.value !== OutputFormat.Keep || sizeBoxEnabled.value,
+  () => outputFormat.value !== OutputFormat.Keep || sizeBoxEnabled.value || targetEnabled.value,
 )
 const canStart = computed(
   () =>
@@ -194,6 +246,7 @@ const canStart = computed(
     !busy.value &&
     hasRule.value &&
     sizeBoxValid.value &&
+    targetValid.value &&
     !items.value.some((item) => item.inspecting),
 )
 const progressPercent = computed(() =>
@@ -319,6 +372,7 @@ function summaryText(result: BatchResult): string {
   const parts = [`成功 ${result.success}`, `失败 ${result.failed}`]
   if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
   if (result.canceled > 0) parts.push(`取消 ${result.canceled}`)
+  if (result.extreme_degraded > 0) parts.push(`极端降级 ${result.extreme_degraded}`)
   let text = `处理完成：${parts.join('、')}`
   if (result.saved_bytes > 0) {
     text += `；累计节省 ${formatBytes(result.saved_bytes)}`
@@ -357,7 +411,7 @@ async function startBatch() {
       paths: batchPaths,
       rules: {
         output_format: outputFormat.value,
-        target_bytes: 0,
+        target_bytes: targetEnabled.value ? targetBytes.value : 0,
         max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
         max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
       },
@@ -400,6 +454,18 @@ function onMaxWidth(event: Event) {
 
 function onMaxHeight(event: Event) {
   maxHeight.value = Number((event.target as HTMLInputElement).value)
+}
+
+function onTargetToggle(event: Event) {
+  targetEnabled.value = (event.target as HTMLInputElement).checked
+}
+
+function onTargetValue(event: Event) {
+  targetValue.value = Number((event.target as HTMLInputElement).value)
+}
+
+function onTargetUnit(event: Event) {
+  targetUnit.value = (event.target as HTMLSelectElement).value as 'KB' | 'MB'
 }
 
 function dismissSummary() {
@@ -610,6 +676,14 @@ onUnmounted(() => {
 .input:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.input--target {
+  width: 100px;
+}
+
+.select--unit {
+  width: 78px;
 }
 
 .field__sep,

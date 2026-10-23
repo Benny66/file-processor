@@ -112,6 +112,7 @@ export namespace service {
 	    output_bytes: number;
 	    width: number;
 	    height: number;
+	    extreme_degraded: boolean;
 	    message?: string;
 	
 	    static createFrom(source: any = {}) {
@@ -127,6 +128,7 @@ export namespace service {
 	        this.output_bytes = source["output_bytes"];
 	        this.width = source["width"];
 	        this.height = source["height"];
+	        this.extreme_degraded = source["extreme_degraded"];
 	        this.message = source["message"];
 	    }
 	}
@@ -138,6 +140,7 @@ export namespace service {
 	    failed: number;
 	    skipped: number;
 	    canceled: number;
+	    extreme_degraded: number;
 	    saved_bytes: number;
 	
 	    static createFrom(source: any = {}) {
@@ -153,6 +156,7 @@ export namespace service {
 	        this.failed = source["failed"];
 	        this.skipped = source["skipped"];
 	        this.canceled = source["canceled"];
+	        this.extreme_degraded = source["extreme_degraded"];
 	        this.saved_bytes = source["saved_bytes"];
 	    }
 	

@@ -23,6 +23,12 @@ const (
 	BoxMaxDimension = 65535
 )
 
+// 目标体积范围：1 KB–1 GB（单一真相；前端镜像在 frontend/src/lib/image.ts）。
+const (
+	TargetBytesMin int64 = 1024
+	TargetBytesMax int64 = 1073741824
+)
+
 // BatchRules 是一批图片的处理规则；目标体积与尺寸字段在后续切片实现。
 type BatchRules struct {
 	OutputFormat string `json:"output_format"`
@@ -50,26 +56,28 @@ const (
 
 // ItemResult 是单个文件的处理结果。
 type ItemResult struct {
-	Path        string     `json:"path"`
-	OutputPath  string     `json:"output_path"`
-	Status      ItemStatus `json:"status"`
-	SourceBytes int64      `json:"source_bytes"`
-	OutputBytes int64      `json:"output_bytes"`
-	Width       int        `json:"width"`
-	Height      int        `json:"height"`
-	Message     string     `json:"message,omitempty"`
+	Path            string     `json:"path"`
+	OutputPath      string     `json:"output_path"`
+	Status          ItemStatus `json:"status"`
+	SourceBytes     int64      `json:"source_bytes"`
+	OutputBytes     int64      `json:"output_bytes"`
+	Width           int        `json:"width"`
+	Height          int        `json:"height"`
+	ExtremeDegraded bool       `json:"extreme_degraded"`
+	Message         string     `json:"message,omitempty"`
 }
 
 // BatchResult 是一个批次的汇总结果。
 type BatchResult struct {
-	OK         bool         `json:"ok"`
-	Message    string       `json:"message,omitempty"`
-	Items      []ItemResult `json:"items"`
-	Success    int          `json:"success"`
-	Failed     int          `json:"failed"`
-	Skipped    int          `json:"skipped"`
-	Canceled   int          `json:"canceled"`
-	SavedBytes int64        `json:"saved_bytes"`
+	OK              bool         `json:"ok"`
+	Message         string       `json:"message,omitempty"`
+	Items           []ItemResult `json:"items"`
+	Success         int          `json:"success"`
+	Failed          int          `json:"failed"`
+	Skipped         int          `json:"skipped"`
+	Canceled        int          `json:"canceled"`
+	ExtremeDegraded int          `json:"extreme_degraded"`
+	SavedBytes      int64        `json:"saved_bytes"`
 }
 
 // BatchProgress 是批次进度事件载荷。
@@ -88,8 +96,9 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	if err := imageproc.ValidateOutputFormat(req.Rules.OutputFormat); err != nil {
 		return BatchResult{}, err
 	}
-	if req.Rules.TargetBytes != 0 {
-		return BatchResult{}, apperr.Validation("目标体积规则尚未支持")
+	if req.Rules.TargetBytes != 0 &&
+		(req.Rules.TargetBytes < TargetBytesMin || req.Rules.TargetBytes > TargetBytesMax) {
+		return BatchResult{}, apperr.Validation("目标体积需在 1 KB–1 GB")
 	}
 	if (req.Rules.MaxWidth == 0) != (req.Rules.MaxHeight == 0) {
 		return BatchResult{}, apperr.Validation("宽高需同时设置")
@@ -167,6 +176,9 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 		switch item.Status {
 		case StatusSuccess:
 			summary.Success++
+			if item.ExtremeDegraded {
+				summary.ExtremeDegraded++
+			}
 			summary.SavedBytes += item.SourceBytes - item.OutputBytes
 		case StatusFailed:
 			summary.Failed++
@@ -235,8 +247,9 @@ func (s *Service) convertOne(path string, rules BatchRules) ItemResult {
 		return res
 	}
 	boxEnabled := rules.MaxWidth > 0
-	if outFormat == probe.Format &&
-		(!boxEnabled || (probe.Width <= rules.MaxWidth && probe.Height <= rules.MaxHeight)) {
+	targetOK := rules.TargetBytes == 0 || res.SourceBytes <= rules.TargetBytes
+	boxOK := !boxEnabled || (probe.Width <= rules.MaxWidth && probe.Height <= rules.MaxHeight)
+	if outFormat == probe.Format && targetOK && boxOK {
 		res.Status = StatusSkipped
 		res.Message = "已达标"
 		res.Width = probe.Width
@@ -245,9 +258,10 @@ func (s *Service) convertOne(path string, rules BatchRules) ItemResult {
 	}
 
 	converted, err := imageproc.Convert(data, path, imageproc.ConvertOptions{
-		Format:    rules.OutputFormat,
-		MaxWidth:  rules.MaxWidth,
-		MaxHeight: rules.MaxHeight,
+		Format:      rules.OutputFormat,
+		MaxWidth:    rules.MaxWidth,
+		MaxHeight:   rules.MaxHeight,
+		TargetBytes: rules.TargetBytes,
 	})
 	if err != nil {
 		res.Status = StatusFailed
@@ -273,6 +287,7 @@ func (s *Service) convertOne(path string, rules BatchRules) ItemResult {
 	res.OutputBytes = int64(len(converted.Data))
 	res.Width = converted.Width
 	res.Height = converted.Height
+	res.ExtremeDegraded = converted.ExtremeDegraded
 	return res
 }
 

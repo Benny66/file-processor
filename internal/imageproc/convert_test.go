@@ -263,6 +263,138 @@ func TestConvertRejectsAnimated(t *testing.T) {
 	}
 }
 
+func TestConvertTargetSizeJPEG(t *testing.T) {
+	src := noiseImage(400, 300)
+	pngBytes := encodeForTest(t, "png", src)
+
+	got, err := Convert(pngBytes, "image.png", ConvertOptions{Format: OutputJPEG, TargetBytes: 50 * 1024})
+	if err != nil {
+		t.Fatalf("Convert target 失败: %v", err)
+	}
+	if len(got.Data) > 50*1024 {
+		t.Fatalf("目标体积未达成：%d > %d", len(got.Data), 50*1024)
+	}
+	if got.Quality <= 20 || got.ExtremeDegraded {
+		t.Errorf("50KB 目标不应极端降级：quality=%d extreme=%v", got.Quality, got.ExtremeDegraded)
+	}
+	if got.Width != 400 || got.Height != 300 {
+		t.Errorf("50KB 目标不应缩尺寸：%dx%d", got.Width, got.Height)
+	}
+
+	small, err := Convert(pngBytes, "image.png", ConvertOptions{Format: OutputJPEG, TargetBytes: 5 * 1024})
+	if err != nil {
+		t.Fatalf("Convert 5KB 失败: %v", err)
+	}
+	if len(small.Data) > 5*1024 {
+		t.Errorf("5KB 目标未达成：%d", len(small.Data))
+	}
+	if small.Width >= 400 && small.Height >= 300 {
+		t.Errorf("5KB 目标应缩尺寸：%dx%d", small.Width, small.Height)
+	}
+
+	large := encodeForTest(t, "png", noiseImage(800, 600))
+	extreme, err := Convert(large, "image.png", ConvertOptions{Format: OutputJPEG, TargetBytes: 800})
+	if err != nil {
+		t.Fatalf("Convert 800B 失败（不应因降质失败）: %v", err)
+	}
+	if len(extreme.Data) > 1024 {
+		t.Errorf("800B 目标未达成：%d", len(extreme.Data))
+	}
+	if !extreme.ExtremeDegraded {
+		t.Errorf("800B 目标应标记极端降级：quality=%d dims=%dx%d", extreme.Quality, extreme.Width, extreme.Height)
+	}
+
+	if _, err := Convert(pngBytes, "image.png", ConvertOptions{Format: OutputJPEG, TargetBytes: 50}); err == nil {
+		t.Errorf("不可达目标应失败")
+	}
+}
+
+func TestConvertTargetQualityPriority(t *testing.T) {
+	src := noiseImage(400, 300)
+	pngBytes := encodeForTest(t, "png", src)
+	q85, err := Convert(pngBytes, "image.png", ConvertOptions{Format: OutputJPEG, Quality: 85})
+	if err != nil {
+		t.Fatalf("q85 基线失败: %v", err)
+	}
+	got, err := Convert(pngBytes, "image.png", ConvertOptions{Format: OutputJPEG, TargetBytes: int64(len(q85.Data))})
+	if err != nil {
+		t.Fatalf("目标 = q85 体积时失败: %v", err)
+	}
+	if len(got.Data) > len(q85.Data) {
+		t.Errorf("输出体积超过目标")
+	}
+	if got.Quality < 85 {
+		t.Errorf("应优先保留最高质量，实际 quality=%d", got.Quality)
+	}
+}
+
+func TestConvertTargetWithBox(t *testing.T) {
+	src := noiseImage(800, 600)
+	pngBytes := encodeForTest(t, "png", src)
+	got, err := Convert(pngBytes, "image.png", ConvertOptions{
+		Format:      OutputJPEG,
+		MaxWidth:    300,
+		MaxHeight:   300,
+		TargetBytes: 20 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("Convert 失败: %v", err)
+	}
+	if got.Width > 300 || got.Height > 300 {
+		t.Errorf("输出超出宽高盒：%dx%d", got.Width, got.Height)
+	}
+	if len(got.Data) > 20*1024 {
+		t.Errorf("目标体积未达成：%d", len(got.Data))
+	}
+}
+
+func TestConvertTargetPNG(t *testing.T) {
+	src := noiseImage(400, 300)
+	got, err := Convert(encodeForTest(t, "png", src), "image.png", ConvertOptions{
+		Format:      OutputPNG,
+		TargetBytes: 50 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("Convert PNG target 失败: %v", err)
+	}
+	if got.Format != OutputPNG || len(got.Data) > 50*1024 {
+		t.Errorf("PNG 目标结果不对：format=%s bytes=%d", got.Format, len(got.Data))
+	}
+	if _, err := png.Decode(bytes.NewReader(got.Data)); err != nil {
+		t.Errorf("输出不是可解码 PNG: %v", err)
+	}
+}
+
+func TestConvertTargetWebP(t *testing.T) {
+	src := noiseImage(400, 300)
+	got, err := Convert(encodeForTest(t, "png", src), "image.png", ConvertOptions{
+		Format:      OutputWebP,
+		TargetBytes: 30 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("Convert WebP target 失败: %v", err)
+	}
+	if len(got.Data) > 30*1024 || got.Format != OutputWebP {
+		t.Errorf("WebP 目标结果不对：format=%s bytes=%d", got.Format, len(got.Data))
+	}
+}
+
+func noiseImage(w, h int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := uint32(x*73856093) ^ uint32(y*19349663)
+			img.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(v),
+				G: uint8(v >> 8),
+				B: uint8(v >> 16),
+				A: 255,
+			})
+		}
+	}
+	return img
+}
+
 func hasFormatSignature(format string, data []byte) bool {
 	switch format {
 	case OutputJPEG:

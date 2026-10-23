@@ -215,6 +215,143 @@ func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
 	}
 }
 
+func TestProcessBatchTargetSize(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "noise.png")
+	if err := os.WriteFile(src, batchNoisePNG(t, 400, 300), 0o644); err != nil {
+		t.Fatalf("写入源文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, TargetBytes: 30 * 1024},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Success != 1 {
+		t.Fatalf("批次统计不对：%+v", result)
+	}
+	item := result.Items[0]
+	if item.Status != StatusSuccess || item.OutputPath == "" {
+		t.Fatalf("结果不对：%+v", item)
+	}
+	if item.OutputBytes > 30*1024 {
+		t.Errorf("目标体积未达成：%d > %d", item.OutputBytes, 30*1024)
+	}
+	if result.ExtremeDegraded != 0 {
+		t.Errorf("30KB 目标不应极端降级：%+v", item)
+	}
+}
+
+func TestProcessBatchTargetExtreme(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "noise.png")
+	if err := os.WriteFile(src, batchNoisePNG(t, 400, 300), 0o644); err != nil {
+		t.Fatalf("写入源文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{
+				OutputFormat: imageproc.OutputPNG,
+				MaxWidth:     200,
+				MaxHeight:    200,
+				TargetBytes:  1024,
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Success != 1 || result.ExtremeDegraded != 1 {
+		t.Fatalf("极端降级统计不对：%+v", result)
+	}
+	item := result.Items[0]
+	if !item.ExtremeDegraded {
+		t.Errorf("item 未标记极端降级：%+v", item)
+	}
+	if item.Width > 200 || item.Height > 200 {
+		t.Errorf("输出超出宽高盒：%dx%d", item.Width, item.Height)
+	}
+	if item.OutputBytes > 1024 {
+		t.Errorf("目标体积未达成：%d", item.OutputBytes)
+	}
+}
+
+func TestProcessBatchTargetSkipsSmallSource(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "small.png")
+	srcBytes := batchTestPNG(t, 4, 4)
+	if err := os.WriteFile(src, srcBytes, 0o644); err != nil {
+		t.Fatalf("写入源文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{OutputFormat: imageproc.OutputKeep, TargetBytes: 1024},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Skipped != 1 || result.Success != 0 {
+		t.Fatalf("批次统计不对：%+v", result)
+	}
+	item := result.Items[0]
+	if item.Status != StatusSkipped || item.Message != "已达标" || item.OutputPath != "" {
+		t.Errorf("应已达标跳过：%+v", item)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "small-out.png")); !os.IsNotExist(err) {
+		t.Errorf("跳过项不应产出文件")
+	}
+	after, err := os.ReadFile(src)
+	if err != nil || string(after) != string(srcBytes) {
+		t.Errorf("源文件被修改")
+	}
+}
+
+func TestProcessBatchTargetWithBox(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "noise.png")
+	if err := os.WriteFile(src, batchNoisePNG(t, 800, 600), 0o644); err != nil {
+		t.Fatalf("写入源文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Paths: []string{src},
+			Rules: BatchRules{
+				OutputFormat: imageproc.OutputJPEG,
+				MaxWidth:     300,
+				MaxHeight:    300,
+				TargetBytes:  20 * 1024,
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Success != 1 {
+		t.Fatalf("批次统计不对：%+v", result)
+	}
+	item := result.Items[0]
+	if item.Width > 300 || item.Height > 300 {
+		t.Errorf("输出超出宽高盒：%dx%d", item.Width, item.Height)
+	}
+	if item.OutputBytes > 20*1024 {
+		t.Errorf("目标体积未达成：%d", item.OutputBytes)
+	}
+}
+
 func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 	src := filepath.Join(t.TempDir(), "ok.png")
 	if err := os.WriteFile(src, batchTestPNG(t, 10, 10), 0o644); err != nil {
@@ -224,7 +361,8 @@ func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 
 	cases := []BatchRules{
 		{OutputFormat: "gif"},
-		{OutputFormat: imageproc.OutputPNG, TargetBytes: 1024},
+		{OutputFormat: imageproc.OutputPNG, TargetBytes: 512},
+		{OutputFormat: imageproc.OutputPNG, TargetBytes: 1073741825},
 		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100},
 		{OutputFormat: imageproc.OutputPNG, MaxHeight: 100},
 		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100, MaxHeight: 0},
@@ -300,6 +438,22 @@ func TestProcessBatchCancelsRemaining(t *testing.T) {
 		}
 	}
 	svc.CancelBatch()
+}
+
+func batchNoisePNG(t *testing.T, w, h int) []byte {
+	t.Helper()
+	img := image.NewNRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			v := uint32(x*73856093) ^ uint32(y*19349663)
+			img.SetNRGBA(x, y, color.NRGBA{R: uint8(v), G: uint8(v >> 8), B: uint8(v >> 16), A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("png encode: %v", err)
+	}
+	return buf.Bytes()
 }
 
 func batchTestPNG(t *testing.T, w, h int) []byte {
