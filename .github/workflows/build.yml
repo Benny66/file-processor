@@ -111,7 +111,7 @@ jobs:
           node-version: '22'
 
       - name: Install wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
 
       - name: Install frontend deps
         run: cd frontend && npm install

@@ -14,9 +14,9 @@ TBD - created by archiving change package-release. Update Purpose after archive.
 - **WHEN** 在 mac/linux 上执行 `make package os=windows`
 - **THEN** 交叉编译出 Windows .exe（无 makensis 时降级为裸 exe 并提示）
 
-#### Scenario: 非本机平台明确报错
-- **WHEN** 在 mac 上执行 `make package os=linux`（或反过来）
-- **THEN** 报错提示"请在对应平台执行"，不产出无效产物
+#### Scenario: mac 上产 Linux 包经容器
+- **WHEN** 在 mac 上执行 `make package os=linux`
+- **THEN** 经 Ubuntu 20.04 容器构建并产出 `.deb`（要求 Docker 可用）；Docker 不可用时明确报错，不产出无效产物
 
 ### Requirement: mac dmg 安装包
 macOS 打包 MUST 在 `.app` 之后封装为 `.dmg` 安装包，并在产出后**回读校验**美化结果，
@@ -118,8 +118,8 @@ macOS 打包 MUST 在 `.app` 之后封装为 `.dmg` 安装包，并在产出后*
 - **THEN** 资产名含应用名、版本与平台，用户无需打开即可分辨
 
 #### Scenario: 单平台上无法产出的产物由流水线补齐
-- **WHEN** 某平台的安装包只能在对应操作系统上构建
-- **THEN** 由该平台的构建环境产出并汇入同一次发布，不要求操作者具备所有平台
+- **WHEN** 某平台的安装包只能在对应操作系统上构建（如 Linux `.deb` 的钉死 `ubuntu:20.04` 容器）
+- **THEN** 由 tag 发布工作流中独立的 `package-linux` job 产出，经 artifact 汇入同一次 Release，不要求操作者具备所有平台
 
 ### Requirement: 版本号写入必须单一实现
 把版本号写进配置的代码 MUST 只有一处实现，本地发布与 CI 发布 MUST 共用它。

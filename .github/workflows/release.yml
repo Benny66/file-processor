@@ -7,10 +7,13 @@ name: Release
 # 版本号取自 tag（去掉前缀 v），经 scripts/set-version.sh 写入单一真相，
 # 再由 wails 渲染进 macOS Info.plist / Windows exe 版本资源 / NSIS 注册表。
 #
-# 三个 job 而非两个，是为了避免两条平台腿抢建同一个 Release：
-#   1. verify  —— 不从不绿的提交发版（tag 可以打在任意提交上）
-#   2. package —— 两平台并行打包，产物作为 workflow artifact 传递
-#   3. release —— 两腿都成功后，单点创建 Release 并附加全部产物
+# 四个 job，平台腿只传产物、release 单点建 Release（避免抢建）：
+#   1. verify        —— 不从不绿的提交发版（tag 可以打在任意提交上）
+#   2. package       —— macOS / Windows matrix 并行打包，产物作为 workflow artifact 传递
+#   3. package-linux —— Linux .deb 腿：钉死 ubuntu:20.04 容器（麒麟 glibc 2.31 +
+#                       WebKitGTK 2.28.1，与 build.yml 的 linux-deb 同环境）。
+#                       不并入 package matrix——matrix 条目跑在 VM 上，本腿需要 container
+#   4. release       —— 三腿都成功后，单点创建 Release 并附加全部产物
 on:
   push:
     tags: ['v*']
@@ -69,8 +72,9 @@ jobs:
         with:
           node-version: '22'
 
+      # 与 build.yml 钉同一版本：发布链与验证链的工具链必须一致，@latest 会漂移
       - name: Install wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
 
       - name: Install frontend deps
         run: cd frontend && npm install
@@ -149,8 +153,109 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Linux .deb 腿：tag 发布时产出 .deb 汇入同一 Release。
+  # 环境与 build.yml 的 linux-deb job 完全一致（麒麟 glibc 2.31 + WebKitGTK 2.28.1，
+  # 固定 ubuntu:20.04 容器不随 runner 漂移），因此两边依赖版本必须同步改。
+  package-linux:
+    needs: verify
+    runs-on: ubuntu-latest
+    container: ubuntu:20.04
+    steps:
+      # ubuntu:20.04 最小镜像没有 git，checkout 之前必须先装
+      - name: Install git for checkout
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential pkg-config curl file \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev=2.28.1-1 \
+            libwebkit2gtk-4.0-37=2.28.1-1 \
+            gir1.2-webkit2-4.0=2.28.1-1 \
+            libjavascriptcoregtk-4.0-dev=2.28.1-1 \
+            libjavascriptcoregtk-4.0-18=2.28.1-1 \
+            gir1.2-javascriptcoregtk-4.0=2.28.1-1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+
+      - name: 写入版本号（取自 tag）
+        shell: bash
+        run: bash scripts/set-version.sh "${GITHUB_REF_NAME#v}"
+
+      # 与 package 两腿同款母版防呆（占位符拆写，原因见上）
+      - name: Detect template
+        id: template
+        shell: bash
+        run: |
+          PH='__APP_''NAME__'
+          if git grep -q "$PH" -- go.mod wails.json main.go 2>/dev/null; then
+            echo "is_template=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::检测到母版占位符——跳过打包（母版无安装包可发，Release 只带源码归档）"
+          else
+            echo "is_template=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build frontend
+        if: steps.template.outputs.is_template == 'false'
+        run: cd frontend && npm install && npm run build
+
+      - name: Package .deb
+        if: steps.template.outputs.is_template == 'false'
+        run: bash scripts/package.sh linux
+
+      # 元数据断言：架构/包名/版本任一不符即红，不把错包发进 Release
+      - name: 校验 .deb 元数据
+        if: steps.template.outputs.is_template == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(node -p "require('./wails.json').outputfilename")"
+          V="${GITHUB_REF_NAME#v}"
+          DEB="build/bin/${APP}_${V}_amd64.deb"
+          [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --info "$DEB" > /tmp/deb-info.txt
+          grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
+          grep -E '^ Architecture: amd64$' /tmp/deb-info.txt
+          grep -E "^ Version: ${V}$" /tmp/deb-info.txt
+          echo "✓ deb 元数据校验通过（imageworkshop / amd64 / ${V}）"
+
+      # 资产名与其他平台同款「应用名-版本-平台-架构」
+      - name: 收集产物
+        if: steps.template.outputs.is_template == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$(node -p "require('./wails.json').outputfilename")"
+          V="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp "build/bin/${APP}_${V}_amd64.deb" "dist/${APP}-${V}-linux-amd64.deb"
+          echo "本次收集到的产物："
+          ls -la dist
+
+      - uses: actions/upload-artifact@v4
+        if: steps.template.outputs.is_template == 'false'
+        with:
+          name: installers-linux
+          path: dist/*
+          if-no-files-found: error
+
   release:
-    needs: [verify, package]
+    needs: [verify, package, package-linux]
     runs-on: ubuntu-latest
     steps:
       # gh 需要仓库上下文（推断 owner/repo）——没有 checkout 会直接报
@@ -182,6 +287,10 @@ jobs:
             gh release create "$TAG" --title "$TAG" --generate-notes
           fi
           if [ -d dist ] && [ -n "$(ls -A dist 2>/dev/null)" ]; then
+            # 无签名分发：给全部产物生成校验和一并上传（网盘/IM 转发后可自查完整性）。
+            # 先在 /tmp 生成再落位，避免 SHA256SUMS.txt 自己被算进去。
+            ( cd dist && sha256sum -- * > /tmp/SHA256SUMS.txt ) \
+              && mv /tmp/SHA256SUMS.txt dist/SHA256SUMS.txt
             gh release upload "$TAG" dist/* --clobber
             echo "已附加产物："
             ls -la dist
