@@ -221,6 +221,8 @@
       <div class="dropzone__icon" aria-hidden="true">＋</div>
       <p class="dropzone__title">将图片或文件夹拖到这里</p>
       <p v-if="supportedFormats" class="dropzone__hint">支持 {{ supportedFormats }}</p>
+      <!-- D-46：与 README 首句同口径的隐私承诺，第一屏可见（Squoosh 先例：零成本高信任）。 -->
+      <p class="dropzone__hint">所有处理在本机完成：不上传、不联网、不采集遥测</p>
     </div>
 
     <ul v-else class="queue" aria-label="待处理图片">

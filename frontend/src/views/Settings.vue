@@ -104,6 +104,14 @@ onMounted(async () => {
       <span class="setting__muted">{{ info?.platform || '' }}</span>
     </div>
 
+    <!-- D-46：隐私声明与 README 首句同口径；改文案需三处同步（README/空态/设置页）。 -->
+    <div class="setting">
+      <span class="setting__label">隐私</span>
+      <span class="setting__path" title="运行时不发起任何网络请求；日志与崩溃信息仅写入本机数据目录">
+        运行时不发起任何网络请求；日志与崩溃信息仅写入本机数据目录
+      </span>
+    </div>
+
     <div class="setting">
       <span class="setting__label">日志文件</span>
       <span class="setting__path" :title="info?.log_file">{{ info?.log_file || '—' }}</span>
