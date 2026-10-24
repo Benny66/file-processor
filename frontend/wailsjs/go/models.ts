@@ -72,6 +72,94 @@ export namespace imageproc {
 
 export namespace model {
 	
+	export class HistoryBatch {
+	    id: number;
+	    created_at: number;
+	    updated_at: number;
+	    batch_key: string;
+	    output_format: string;
+	    target_bytes: number;
+	    max_width: number;
+	    max_height: number;
+	    summary: string;
+	    total: number;
+	    success: number;
+	    failed: number;
+	    skipped: number;
+	    canceled: number;
+	    saved_bytes: number;
+	    files_purged: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryBatch(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	        this.batch_key = source["batch_key"];
+	        this.output_format = source["output_format"];
+	        this.target_bytes = source["target_bytes"];
+	        this.max_width = source["max_width"];
+	        this.max_height = source["max_height"];
+	        this.summary = source["summary"];
+	        this.total = source["total"];
+	        this.success = source["success"];
+	        this.failed = source["failed"];
+	        this.skipped = source["skipped"];
+	        this.canceled = source["canceled"];
+	        this.saved_bytes = source["saved_bytes"];
+	        this.files_purged = source["files_purged"];
+	    }
+	}
+	export class HistoryItem {
+	    id: number;
+	    created_at: number;
+	    updated_at: number;
+	    batch_id: number;
+	    source_path: string;
+	    source_name: string;
+	    source_bytes: number;
+	    rel_path: string;
+	    status: string;
+	    message: string;
+	    format: string;
+	    width: number;
+	    height: number;
+	    output_bytes: number;
+	    thumbnail: string;
+	    staging_name: string;
+	    downloaded: boolean;
+	    downloaded_at: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.created_at = source["created_at"];
+	        this.updated_at = source["updated_at"];
+	        this.batch_id = source["batch_id"];
+	        this.source_path = source["source_path"];
+	        this.source_name = source["source_name"];
+	        this.source_bytes = source["source_bytes"];
+	        this.rel_path = source["rel_path"];
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.output_bytes = source["output_bytes"];
+	        this.thumbnail = source["thumbnail"];
+	        this.staging_name = source["staging_name"];
+	        this.downloaded = source["downloaded"];
+	        this.downloaded_at = source["downloaded_at"];
+	    }
+	}
 	export class ImagePreset {
 	    id: number;
 	    created_at: number;
@@ -116,6 +204,78 @@ export namespace page {
 	        this.page = source["page"];
 	        this.page_size = source["page_size"];
 	    }
+	}
+	export class Result_file_processor_internal_model_HistoryBatch_ {
+	    list: model.HistoryBatch[];
+	    total: number;
+	    page: number;
+	    page_size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result_file_processor_internal_model_HistoryBatch_(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.list = this.convertValues(source["list"], model.HistoryBatch);
+	        this.total = source["total"];
+	        this.page = source["page"];
+	        this.page_size = source["page_size"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Result_file_processor_internal_model_HistoryItem_ {
+	    list: model.HistoryItem[];
+	    total: number;
+	    page: number;
+	    page_size: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result_file_processor_internal_model_HistoryItem_(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.list = this.convertValues(source["list"], model.HistoryItem);
+	        this.total = source["total"];
+	        this.page = source["page"];
+	        this.page_size = source["page_size"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Result_file_processor_internal_model_ImagePreset_ {
 	    list: model.ImagePreset[];
@@ -172,22 +332,6 @@ export namespace service {
 	        this.rel_path = source["rel_path"];
 	    }
 	}
-	export class OutputPlan {
-	    mode: string;
-	    directory: string;
-	    pattern: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new OutputPlan(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.mode = source["mode"];
-	        this.directory = source["directory"];
-	        this.pattern = source["pattern"];
-	    }
-	}
 	export class BatchRules {
 	    output_format: string;
 	    target_bytes: number;
@@ -209,7 +353,6 @@ export namespace service {
 	export class BatchRequest {
 	    items: BatchItem[];
 	    rules: BatchRules;
-	    output: OutputPlan;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchRequest(source);
@@ -219,7 +362,6 @@ export namespace service {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], BatchItem);
 	        this.rules = this.convertValues(source["rules"], BatchRules);
-	        this.output = this.convertValues(source["output"], OutputPlan);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -246,6 +388,7 @@ export namespace service {
 	    status: string;
 	    source_bytes: number;
 	    output_bytes: number;
+	    format?: string;
 	    width: number;
 	    height: number;
 	    extreme_degraded: boolean;
@@ -263,6 +406,7 @@ export namespace service {
 	        this.status = source["status"];
 	        this.source_bytes = source["source_bytes"];
 	        this.output_bytes = source["output_bytes"];
+	        this.format = source["format"];
 	        this.width = source["width"];
 	        this.height = source["height"];
 	        this.extreme_degraded = source["extreme_degraded"];
@@ -280,6 +424,7 @@ export namespace service {
 	    canceled: number;
 	    extreme_degraded: number;
 	    saved_bytes: number;
+	    batch_key: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchResult(source);
@@ -296,6 +441,7 @@ export namespace service {
 	        this.canceled = source["canceled"];
 	        this.extreme_degraded = source["extreme_degraded"];
 	        this.saved_bytes = source["saved_bytes"];
+	        this.batch_key = source["batch_key"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -317,39 +463,38 @@ export namespace service {
 		}
 	}
 	
-	export class ImageSettings {
-	    rules: BatchRules;
-	    output: OutputPlan;
+	export class DownloadOptions {
+	    directory: string;
+	    keep_structure: boolean;
+	    pattern: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new ImageSettings(source);
+	        return new DownloadOptions(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.rules = this.convertValues(source["rules"], BatchRules);
-	        this.output = this.convertValues(source["output"], OutputPlan);
+	        this.directory = source["directory"];
+	        this.keep_structure = source["keep_structure"];
+	        this.pattern = source["pattern"];
+	    }
+	}
+	export class DownloadResult {
+	    path: string;
+	    message?: string;
+	    ok: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DownloadResult(source);
 	    }
 	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.message = source["message"];
+	        this.ok = source["ok"];
+	    }
 	}
-	
 	
 	export class PreviewConvertResult {
 	    status: string;

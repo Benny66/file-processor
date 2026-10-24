@@ -197,10 +197,10 @@ func (a *App) RenderOutputSample(pattern, sampleName, outputFormat string) (stri
 	return a.svc.RenderOutputSample(pattern, sampleName, outputFormat)
 }
 
-// ValidateImageRules 在发起批次之前预检规则与输出目的地，返回可直接展示的提示文案；合法时返回空串。
+// ValidateImageRules 在发起批次之前预检规则，返回可直接展示的提示文案；合法时返回空串。
 // 判定与文案的单一真相都在 service，前端不再比较大小、也不再抄一份提示。
-func (a *App) ValidateImageRules(rules service.BatchRules, output service.OutputPlan) string {
-	return a.svc.ValidateImageRules(rules, output)
+func (a *App) ValidateImageRules(rules service.BatchRules) string {
+	return a.svc.ValidateImageRules(rules)
 }
 
 // SupportedFormatHints 返回可导入格式的展示清单（单一真相在 imageproc.supportedFormats）。
@@ -250,14 +250,56 @@ func (a *App) DeletePreset(id uint) error {
 	return a.svc.DeletePreset(id)
 }
 
-// GetImageSettings 返回上次使用的图片处理参数（规则 + 输出目的地）。
-func (a *App) GetImageSettings() (service.ImageSettings, error) {
+// GetImageSettings 返回上次使用的图片处理参数。
+func (a *App) GetImageSettings() (service.BatchRules, error) {
 	return a.svc.GetImageSettings()
 }
 
-// SaveImageSettings 持久化上次使用的图片处理参数（规则 + 输出目的地）。
-func (a *App) SaveImageSettings(settings service.ImageSettings) error {
-	return a.svc.SaveImageSettings(settings)
+// SaveImageSettings 持久化上次使用的图片处理参数。
+func (a *App) SaveImageSettings(rules service.BatchRules) error {
+	return a.svc.SaveImageSettings(rules)
+}
+
+// ---------------------------------------------------------------------------
+// 绑定方法：下载与历史（ADR-0007 / US-59~64）
+// ---------------------------------------------------------------------------
+
+// GetDownloadOptions 返回下载选项的记忆值（目录为空时回退系统「下载」文件夹）。
+func (a *App) GetDownloadOptions() (service.DownloadOptions, error) {
+	return a.svc.GetDownloadOptions()
+}
+
+// DownloadItems 把一批暂存图片保存到用户目录（下载是唯一落盘出口，US-60）。
+func (a *App) DownloadItems(batchKey string, sourcePaths []string, opts service.DownloadOptions) ([]service.DownloadResult, error) {
+	return a.svc.DownloadItems(batchKey, sourcePaths, opts)
+}
+
+// RevealPath 在系统文件管理器中打开指定路径（下载完成后「打开文件夹」入口）。
+func (a *App) RevealPath(path string) error {
+	if err := reveal.Open(path); err != nil {
+		return apperr.Wrap(err)
+	}
+	return nil
+}
+
+// ListHistoryBatches 分页返回历史记录（最近在前，US-62）。
+func (a *App) ListHistoryBatches(req page.Request) (page.Result[model.HistoryBatch], error) {
+	return a.svc.ListHistoryBatches(req)
+}
+
+// ListHistoryItems 分页返回某次处理的图片明细（US-63）。
+func (a *App) ListHistoryItems(batchKey string, req page.Request) (page.Result[model.HistoryItem], error) {
+	return a.svc.ListHistoryItems(batchKey, req)
+}
+
+// ClearHistory 清空全部历史（记录 + 暂存图片，US-64）。
+func (a *App) ClearHistory() error {
+	return a.svc.ClearHistory()
+}
+
+// HistoryUsage 返回暂存图片的磁盘占用（设置页展示用）。
+func (a *App) HistoryUsage() (int64, error) {
+	return a.svc.HistoryUsage()
 }
 
 // TrayAvailable 告诉前端当前是否能把窗口隐藏到托盘。

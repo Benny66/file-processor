@@ -22,6 +22,10 @@ type Service struct {
 	db  *gorm.DB
 	cfg *config.Config
 
+	// historyRoot 暂存区根目录（ADR-0007：处理结果只进这里，下载是唯一落盘出口）。
+	// 由组合根经 SetHistoryRoot 注入；未注入时批次拒绝开跑（fail-fast 而非静默跳过历史）。
+	historyRoot string
+
 	// 批次互斥状态：同一时间只允许一个批次；取消由 CancelBatch 触发。
 	batchMu      sync.Mutex
 	batchCancel  context.CancelFunc
@@ -31,6 +35,11 @@ type Service struct {
 // New 创建服务聚合，注入数据库连接与配置。
 func New(db *gorm.DB, cfg *config.Config) *Service {
 	return &Service{db: db, cfg: cfg}
+}
+
+// SetHistoryRoot 设置暂存区根目录（应用数据目录下的 history/，组合根注入）。
+func (s *Service) SetHistoryRoot(dir string) {
+	s.historyRoot = dir
 }
 
 // Close 释放底层数据库连接，供优雅关闭时调用。

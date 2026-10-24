@@ -48,11 +48,17 @@ type Config struct {
 	ImageMaxWidth     int    `json:"image_max_width"`
 	ImageMaxHeight    int    `json:"image_max_height"`
 
-	// 上次使用的输出目的地（US-39~42）。空 Mode 表示“源文件同目录”，
-	// 空 Pattern 由读取方按 “{name}-out” 处理；预设不携带这些值（D-34）。
-	ImageOutputMode      string `json:"image_output_mode"`
-	ImageOutputDirectory string `json:"image_output_directory"`
-	ImageOutputPattern   string `json:"image_output_pattern"`
+	// ImageOutputMode / ImageOutputDirectory / ImageOutputPattern 已废止（ADR-0007：
+	// 处理不再写用户目录，输出目的地语义迁移为下载选项）。字段保留仅为兼容旧
+	// config.json 的读取，不再有任何逻辑消费、也不会再写入。
+	ImageOutputMode      string `json:"image_output_mode,omitempty"`
+	ImageOutputDirectory string `json:"image_output_directory,omitempty"`
+	ImageOutputPattern   string `json:"image_output_pattern,omitempty"`
+
+	// 上次下载选项（D-58：目录/保留层级/文件名格式，随每次成功下载记忆）。
+	DownloadDir           string `json:"download_dir,omitempty"`
+	DownloadKeepStructure bool   `json:"download_keep_structure,omitempty"`
+	DownloadPattern       string `json:"download_pattern,omitempty"`
 
 	// path 是配置文件路径，不序列化（json:"-"）。
 	path string `json:"-"`

@@ -32,6 +32,7 @@
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
     <span v-if="item.result && stale" class="row__stale">设置改过了</span>
     <span v-if="item.result?.extreme_degraded" class="row__extreme">画质变差了</span>
+    <span v-if="downloaded && item.result?.status === ItemStatus.Success" class="row__stale">已保存</span>
     <!-- US-14：处理期间仍要能查看结果，所以对比不受 busy 限制；
          US-06 只禁止「编辑队列」，移除按钮才需要 busy。 -->
     <button
@@ -42,7 +43,16 @@
     >
       对比
     </button>
-    <!-- US-44：失败/已取消行可单独重跑；批次运行中禁用（US-06 只禁编辑队列，重跑是新批次）。 -->
+    <!-- US-60：处理成功的图片可保存（下载）到自己的文件夹；暂存区里的原件不动。 -->
+    <button
+      v-if="canDownload"
+      class="row__compare row__download"
+      type="button"
+      @click="emit('download', item.path)"
+    >
+      下载
+    </button>
+    <!-- US-44：失败/已取消行可单独再试一次；批次运行中禁用（再试是新批次）。 -->
     <button
       v-if="canRetry"
       class="row__compare row__retry"
@@ -50,9 +60,9 @@
       :disabled="busy"
       @click="emit('retry', item.path)"
     >
-      重跑
+      再试一次
     </button>
-    <!-- US-45：已检查的图可进调参工作台；批次运行中禁用（D-41：避免与 worker 抢 CPU）。 -->
+    <!-- US-45：已检查的图可先试效果；批次运行中禁用（D-41：避免与 worker 抢 CPU）。 -->
     <button
       v-if="item.info && !item.error"
       class="row__compare row__tune"
@@ -60,7 +70,7 @@
       :disabled="busy"
       @click="emit('tune', item.path)"
     >
-      调参
+      单张试一试
     </button>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
@@ -74,13 +84,22 @@ import { ItemStatus, type ItemStatusValue } from '../../lib/image'
 import { formatBytes } from './format'
 import { isRetryableStatus, type QueueItem } from './types'
 
-const props = defineProps<{ item: QueueItem; busy: boolean; stale: boolean }>()
+const props = defineProps<{
+  item: QueueItem
+  busy: boolean
+  stale: boolean
+  /** 该项在当前会话里可保存（结果成功且所在批次已知）。 */
+  downloadable: boolean
+  /** 本次会话已保存过。 */
+  downloaded: boolean
+}>()
 const emit = defineEmits<{
   (e: 'inspect', path: string): void
   (e: 'remove', path: string): void
   (e: 'compare', path: string): void
   (e: 'retry', path: string): void
   (e: 'tune', path: string): void
+  (e: 'download', path: string): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -177,6 +196,10 @@ const canCompare = computed(
 )
 
 const canRetry = computed(() => isRetryableStatus(props.item.result?.status ?? ''))
+
+const canDownload = computed(
+  () => props.downloadable && props.item.result?.status === ItemStatus.Success && !props.busy,
+)
 
 function formatLabel(format: string): string {
   return format.toUpperCase()
@@ -428,6 +451,10 @@ onUnmounted(() => {
 
 .row__tune {
   color: var(--color-primary);
+}
+
+.row__download {
+  color: var(--color-success);
 }
 
 .row__remove {

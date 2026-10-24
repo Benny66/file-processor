@@ -6,12 +6,20 @@ export function CancelBatch() {
   return window['go']['main']['App']['CancelBatch']();
 }
 
+export function ClearHistory() {
+  return window['go']['main']['App']['ClearHistory']();
+}
+
 export function Confirm(arg1, arg2) {
   return window['go']['main']['App']['Confirm'](arg1, arg2);
 }
 
 export function DeletePreset(arg1) {
   return window['go']['main']['App']['DeletePreset'](arg1);
+}
+
+export function DownloadItems(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DownloadItems'](arg1, arg2, arg3);
 }
 
 export function ExportDatabase(arg1) {
@@ -26,6 +34,10 @@ export function GetDataDir() {
   return window['go']['main']['App']['GetDataDir']();
 }
 
+export function GetDownloadOptions() {
+  return window['go']['main']['App']['GetDownloadOptions']();
+}
+
 export function GetImageSettings() {
   return window['go']['main']['App']['GetImageSettings']();
 }
@@ -38,8 +50,20 @@ export function GetTheme() {
   return window['go']['main']['App']['GetTheme']();
 }
 
+export function HistoryUsage() {
+  return window['go']['main']['App']['HistoryUsage']();
+}
+
 export function InspectImage(arg1) {
   return window['go']['main']['App']['InspectImage'](arg1);
+}
+
+export function ListHistoryBatches(arg1) {
+  return window['go']['main']['App']['ListHistoryBatches'](arg1);
+}
+
+export function ListHistoryItems(arg1, arg2) {
+  return window['go']['main']['App']['ListHistoryItems'](arg1, arg2);
 }
 
 export function ListPresets(arg1) {
@@ -64,6 +88,10 @@ export function RenderOutputSample(arg1, arg2, arg3) {
 
 export function RenderPreview(arg1, arg2) {
   return window['go']['main']['App']['RenderPreview'](arg1, arg2);
+}
+
+export function RevealPath(arg1) {
+  return window['go']['main']['App']['RevealPath'](arg1);
 }
 
 export function SaveImageSettings(arg1) {
@@ -106,6 +134,6 @@ export function TrayAvailable() {
   return window['go']['main']['App']['TrayAvailable']();
 }
 
-export function ValidateImageRules(arg1, arg2) {
-  return window['go']['main']['App']['ValidateImageRules'](arg1, arg2);
+export function ValidateImageRules(arg1) {
+  return window['go']['main']['App']['ValidateImageRules'](arg1);
 }

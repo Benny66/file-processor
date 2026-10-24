@@ -130,43 +130,6 @@
           <option value="MB">MB</option>
         </select>
       </template>
-      <label class="field" for="output-mode">
-        <span class="field__label">输出到</span>
-        <select
-          id="output-mode"
-          class="select"
-          :value="outputMode"
-          :disabled="busy"
-          @change="onOutputModeChange"
-        >
-          <option :value="OutputMode.Source">源文件同目录</option>
-          <option :value="OutputMode.CustomFlat">指定目录</option>
-          <option :value="OutputMode.CustomTree">指定目录·保留结构</option>
-        </select>
-      </label>
-      <button
-        v-if="outputMode !== OutputMode.Source"
-        class="btn btn--dir"
-        type="button"
-        :disabled="busy"
-        :title="outputDir || '选择输出目录'"
-        @click="chooseOutputDir"
-      >
-        {{ outputDir || '选择目录…' }}
-      </button>
-      <label class="field" for="output-pattern">
-        <span class="field__label">命名</span>
-        <input
-          id="output-pattern"
-          class="input input--pattern"
-          type="text"
-          placeholder="{name}-out"
-          :value="outputPattern"
-          :disabled="busy"
-          @input="onOutputPattern"
-        />
-      </label>
-      <span class="field__unit rules__example" :title="namingExample">{{ namingExample }}</span>
       <button class="btn btn--primary" type="button" :disabled="!canStart" @click="startBatch">
         {{ processing ? '处理中…' : '开始处理' }}
       </button>
@@ -203,7 +166,16 @@
     </div>
     <div v-if="batchSummary" class="notice" role="status">
       <span class="notice__text">{{ batchSummary }}</span>
-      <!-- US-43：批次结束后一键重跑全部失败/已取消项；成功/跳过结果不动。 -->
+      <!-- US-60：全部下载——本次（及再试一次）处理成功的图片一键保存到选择的文件夹。 -->
+      <button
+        v-if="downloadableCount > 0 && !busy"
+        class="notice__download"
+        type="button"
+        @click="openDownload('all')"
+      >
+        全部下载（{{ downloadableCount }}）
+      </button>
+      <!-- US-43：把失败/已取消的图片再处理一遍。 -->
       <button
         v-if="retryCount > 0 && !busy"
         class="notice__retry"
@@ -213,6 +185,13 @@
         把没成功的 {{ retryCount }} 张再试一次
       </button>
       <button class="notice__close" type="button" aria-label="关闭处理结果" @click="dismissSummary">
+        ×
+      </button>
+    </div>
+    <div v-if="downloadNote" class="notice" role="status">
+      <span class="notice__text">{{ downloadNote.text }}</span>
+      <button class="notice__download" type="button" @click="revealDownloadDir">打开文件夹</button>
+      <button class="notice__close" type="button" aria-label="关闭下载提示" @click="downloadNote = null">
         ×
       </button>
     </div>
@@ -232,15 +211,26 @@
         :item="item"
         :busy="busy"
         :stale="resultsStale"
+        :downloadable="downloadable.has(item.path)"
+        :downloaded="sessionDownloaded.has(item.path)"
         @inspect="requestInspect"
         @remove="removeItem"
         @compare="openCompare"
         @retry="retryOne"
         @tune="openTune"
+        @download="openDownload"
       />
     </ul>
 
     <CompareDialog :open="compareOpen" :item="compareItem" @close="closeCompare" />
+    <!-- 保存图片（US-60/D-58）：单张与全部下载共用一个选项框。 -->
+    <DownloadDialog
+      :open="downloadOpen"
+      :groups="downloadGroups"
+      :sample-name="downloadSample"
+      @close="downloadOpen = false"
+      @downloaded="onDownloaded"
+    />
     <!-- 调参工作台（US-45~48）：打开时播种当前规则；「应用/存预设」后才回写工作台。 -->
     <TuneDialog
       :open="tuneOpen"
@@ -272,7 +262,7 @@ import {
   InspectImage,
   ListPresets,
   ProcessBatch,
-  RenderOutputSample,
+  RevealPath,
   SaveImageSettings,
   ScanPaths,
   SelectDirectory,
@@ -285,10 +275,11 @@ import { useEvent } from '../../composables/useEvent'
 import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, ItemStatus, OutputFormat, OutputMode, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
+import { BoxDimension, ItemStatus, OutputFormat, type OutputFormatValue } from '../../lib/image'
 import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
+import DownloadDialog from './DownloadDialog.vue'
 import PresetDialog from './PresetDialog.vue'
 import TuneDialog from './TuneDialog.vue'
 import { formatBytes } from './format'
@@ -320,10 +311,6 @@ const maxHeight = ref(1080)
 const targetEnabled = ref(false)
 const targetValue = ref(500)
 const targetUnit = ref<'KB' | 'MB'>('KB')
-// 输出目的地（US-39~42）：目录仅 custom 模式携带；命名模板空串由 Go 按默认值处理。
-const outputMode = ref<OutputModeValue>(OutputMode.Source)
-const outputDir = ref('')
-const outputPattern = ref('')
 const resultsStale = ref(false)
 const compareOpen = ref(false)
 const compareItem = ref<QueueItem | null>(null)
@@ -331,6 +318,16 @@ const tuneOpen = ref(false)
 const tuneItem = ref<QueueItem | null>(null)
 const presetDialogOpen = ref(false)
 const selectedPresetId = ref('')
+
+// 下载状态（US-60/61，ADR-0007）：downloadable 记「路径 → 所在批次」——再试一次会产生
+// 新批次，Map 允许一次会话里混合多批次；sessionDownloaded 是本次会话已保存的路径。
+const downloadable = ref(new Map<string, string>())
+const sessionDownloaded = ref(new Set<string>())
+const downloadNote = ref<{ text: string; dir: string } | null>(null)
+const downloadOpen = ref(false)
+const downloadGroups = ref<{ batchKey: string; paths: string[] }[]>([])
+const downloadSample = ref('photo.jpg')
+const downloadableCount = computed(() => downloadable.value.size)
 
 const busy = computed(() => importing.value || processing.value)
 const targetBytes = computed(() =>
@@ -342,48 +339,6 @@ const currentRules = computed<PresetRules>(() => ({
   max_width: sizeBoxEnabled.value ? maxWidth.value : 0,
   max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
 }))
-
-const outputPlan = computed<service.OutputPlan>(() => ({
-  mode: outputMode.value,
-  directory: outputMode.value === OutputMode.Source ? '' : outputDir.value,
-  pattern: outputPattern.value,
-}))
-
-// 「上次设置」的整体：规则 + 输出目的地（预设只带规则，D-34）。
-// 保持纯对象形状；传给绑定时经 new service.ImageSettings(...) 转换（生成类带 convertValues）。
-const currentSettings = computed(() => ({
-  rules: currentRules.value,
-  output: outputPlan.value,
-}))
-
-// 命名示例（US-41）：渲染走 Go 的 RenderOutputSample——模板替换与扩展名映射和真实
-// 落盘同一套实现。此前前端手抄了 renderOutputStem 与格式→扩展名表，边界迟早分叉。
-const namingExample = ref('photo.jpg → photo-out.jpg')
-const namingSample = computed(() => items.value.find((item) => !item.error)?.name ?? 'photo.jpg')
-let namingToken = 0
-let namingTimer: ReturnType<typeof setTimeout> | null = null
-async function refreshNamingExample() {
-  const token = ++namingToken
-  try {
-    const rendered = await invoke(
-      () => RenderOutputSample(outputPattern.value, namingSample.value, outputFormat.value),
-      'RenderOutputSample',
-    )
-    if (token === namingToken && !disposed) {
-      namingExample.value = `${namingSample.value} → ${rendered}`
-    }
-  } catch {
-    // 模板/格式非法：具体原因由规则预检（ruleProblem）展示，这里只标注示例不可用。
-    if (token === namingToken) namingExample.value = '命名示例不可用（见上方提示）'
-  }
-}
-watch([outputPattern, outputFormat, namingSample], () => {
-  if (namingTimer) clearTimeout(namingTimer)
-  namingTimer = setTimeout(() => {
-    namingTimer = null
-    void refreshNamingExample()
-  }, 200)
-}, { immediate: true })
 
 // 「能不能开始」由 Go 判定（US-11），前端只转述它给的原因。
 //
@@ -398,7 +353,7 @@ async function refreshRuleProblem(): Promise<void> {
   let message: string
   try {
     message =
-      (await invoke(() => ValidateImageRules(currentRules.value, outputPlan.value), 'ValidateImageRules')) ?? ''
+      (await invoke(() => ValidateImageRules(currentRules.value), 'ValidateImageRules')) ?? ''
   } catch (e) {
     // 预检本身失败时【失败关闭】：宁可不让开始，也不能带着未知规则开跑。
     message = e instanceof Error ? e.message : '规则校验暂时不可用'
@@ -408,7 +363,7 @@ async function refreshRuleProblem(): Promise<void> {
   if (disposed || token !== ruleToken) return
   ruleProblem.value = message
 }
-watch([currentRules, outputPlan], () => void refreshRuleProblem(), { immediate: true })
+watch(currentRules, () => void refreshRuleProblem(), { immediate: true })
 
 const canStart = computed(
   () =>
@@ -508,26 +463,9 @@ function applyRules(rules: PresetRules) {
   }
 }
 
-function applyOutput(output: service.OutputPlan) {
-  if (
-    output.mode === OutputMode.Source ||
-    output.mode === OutputMode.CustomFlat ||
-    output.mode === OutputMode.CustomTree
-  ) {
-    outputMode.value = output.mode
-  } else {
-    outputMode.value = OutputMode.Source
-  }
-  outputDir.value = output.directory ?? ''
-  outputPattern.value = output.pattern ?? ''
-}
-
 async function saveImageSettings() {
   try {
-    await invoke(
-      () => SaveImageSettings(new service.ImageSettings(currentSettings.value)),
-      'SaveImageSettings',
-    )
+    await invoke(() => SaveImageSettings(currentRules.value), 'SaveImageSettings')
   } catch (e) {
     logWarn('保存上次设置失败', e)
   }
@@ -564,8 +502,7 @@ async function loadSupportedFormats(): Promise<void> {
 async function loadImageSettings() {
   try {
     const saved = await invoke(() => GetImageSettings(), 'GetImageSettings')
-    applyRules(saved.rules)
-    applyOutput(saved.output)
+    applyRules(saved)
   } catch (e) {
     logWarn('恢复上次设置失败，使用默认值', e)
   } finally {
@@ -574,18 +511,7 @@ async function loadImageSettings() {
 }
 
 watch(
-  [
-    outputFormat,
-    sizeBoxEnabled,
-    maxWidth,
-    maxHeight,
-    targetEnabled,
-    targetValue,
-    targetUnit,
-    outputMode,
-    outputDir,
-    outputPattern,
-  ],
+  [outputFormat, sizeBoxEnabled, maxWidth, maxHeight, targetEnabled, targetValue, targetUnit],
   () => {
     markResultsStale()
     scheduleSettingsSave()
@@ -816,6 +742,11 @@ function applyBatchResult(result: BatchResult) {
   processed.value = result.items.length
   total.value = result.items.length
   resultsStale.value = false
+  // 新批次开启新的可下载集合；会话内已保存标记同步清零。
+  downloadable.value = new Map()
+  sessionDownloaded.value = new Set()
+  downloadNote.value = null
+  mergeDownloadable(result)
   refreshBatchSummary()
   logInfo('批量处理完成', {
     success: result.success,
@@ -825,8 +756,8 @@ function applyBatchResult(result: BatchResult) {
 }
 
 // US-43/44：队列内重跑失败与未完成项。Go 侧 ProcessBatch 本就无状态、接受任意
-// 子集，重跑即「以当前规则与输出计划再发一个只含目标项的批次」，返回结果只合并
-// 回这些项。不构成任务历史：清空队列即消失（D-38，对「明确不做」的范围澄清）。
+// 子集，重跑即「以当前规则再发一个只含目标项的批次」，返回结果只合并回这些项。
+// 重跑是新批次：成功项合入 downloadable（Map 允许跨批次），旧结果不动。
 async function runRetry(targets: QueueItem[]) {
   if (busy.value || targets.length === 0) return
   processing.value = true
@@ -844,10 +775,10 @@ async function runRetry(targets: QueueItem[]) {
     const request = new service.BatchRequest({
       items: targets.map((item) => ({ path: item.path, rel_path: item.rel_path ?? '' })),
       rules: currentRules.value,
-      output: outputPlan.value,
     })
     const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
     for (const item of result.items) applyItemResult(item)
+    mergeDownloadable(result)
     processed.value = total.value
     refreshBatchSummary()
     logInfo('重跑完成', {
@@ -907,7 +838,6 @@ async function startBatch() {
     const request = new service.BatchRequest({
       items: batchItems,
       rules: currentRules.value,
-      output: outputPlan.value,
     })
     const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
     applyBatchResult(result)
@@ -966,26 +896,64 @@ function onTargetUnit(event: Event) {
   targetUnit.value = (event.target as HTMLSelectElement).value as 'KB' | 'MB'
 }
 
-function onOutputModeChange(event: Event) {
-  outputMode.value = (event.target as HTMLSelectElement).value as OutputModeValue
-}
-
-function onOutputPattern(event: Event) {
-  outputPattern.value = (event.target as HTMLInputElement).value.trim()
-}
-
-async function chooseOutputDir() {
-  try {
-    const directory = await invoke(() => SelectDirectory('选择输出目录'), 'SelectDirectory')
-    if (directory) outputDir.value = directory
-  } catch (e) {
-    actionError.value = e as AppError
-    logError('打开输出目录选择器失败', e)
-  }
-}
-
 function dismissSummary() {
   batchSummary.value = null
+}
+
+// ---- 下载（US-60/61）：单张与全部共用选项框；结果回填已保存标记与提示条 ----
+
+// 把批次结果里的成功项合入 downloadable（路径 → 批次键）。
+function mergeDownloadable(result: BatchResult) {
+  if (!result.batch_key) return
+  const next = new Map(downloadable.value)
+  for (const item of result.items) {
+    if (item.status === ItemStatus.Success) next.set(item.path, result.batch_key)
+    else next.delete(item.path)
+  }
+  downloadable.value = next
+}
+
+function openDownload(scope: string) {
+  let paths: string[]
+  if (scope === 'all') {
+    paths = [...downloadable.value.keys()]
+  } else {
+    if (!downloadable.value.has(scope)) return
+    paths = [scope]
+  }
+  if (paths.length === 0) return
+  // 按批次键分组（再试一次后可能跨批次）。
+  const groups = new Map<string, string[]>()
+  for (const path of paths) {
+    const key = downloadable.value.get(path)
+    if (!key) continue
+    const list = groups.get(key) ?? []
+    list.push(path)
+    groups.set(key, list)
+  }
+  downloadGroups.value = [...groups.entries()].map(([batchKey, list]) => ({ batchKey, paths: list }))
+  const sample = items.value.find((item) => item.path === paths[0])
+  downloadSample.value = sample?.name ?? 'photo.jpg'
+  downloadOpen.value = true
+}
+
+function onDownloaded(payload: { okCount: number; failCount: number; directory: string }) {
+  downloadOpen.value = false
+  for (const group of downloadGroups.value) {
+    for (const path of group.paths) sessionDownloaded.value.add(path)
+  }
+  const extra = payload.failCount > 0 ? `，${payload.failCount} 张没成功（看图片上的提示）` : ''
+  downloadNote.value = { text: `已保存 ${payload.okCount} 张到「${payload.directory}」${extra}`, dir: payload.directory }
+  logInfo('图片已保存', { ok: payload.okCount, fail: payload.failCount })
+}
+
+async function revealDownloadDir() {
+  if (!downloadNote.value) return
+  try {
+    await invoke(() => RevealPath(downloadNote.value!.dir), 'RevealPath')
+  } catch (e) {
+    logWarn('打开文件夹失败', e)
+  }
 }
 
 async function addFiles() {
@@ -1030,6 +998,9 @@ function clearQueue() {
   total.value = 0
   resultsStale.value = false
   actionError.value = null
+  downloadable.value = new Map()
+  sessionDownloaded.value = new Set()
+  downloadNote.value = null
 }
 
 onMounted(async () => {
@@ -1228,25 +1199,6 @@ onUnmounted(() => {
   width: 78px;
 }
 
-.input--pattern {
-  width: 150px;
-  text-align: left;
-}
-
-.btn--dir {
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rules__example {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .field__sep,
 .field__unit {
   color: var(--text-3);
@@ -1363,6 +1315,31 @@ onUnmounted(() => {
   white-space: nowrap;
   transition: border-color var(--motion-fast) var(--ease-standard),
     color var(--motion-fast) var(--ease-standard);
+}
+
+.notice__download {
+  flex: none;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.notice__download:hover {
+  color: var(--color-primary-700);
+  background: var(--color-primary-200);
+}
+
+.notice__download:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .notice__retry:hover:not(:disabled) {

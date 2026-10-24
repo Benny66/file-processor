@@ -25,6 +25,8 @@ type BaseModel struct {
 func AllModels() []interface{} {
 	return []interface{}{
 		&ImagePreset{},
+		&HistoryBatch{},
+		&HistoryItem{},
 		// gen:model
 	}
 }

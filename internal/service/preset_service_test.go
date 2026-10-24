@@ -21,14 +21,16 @@ func newPresetTestService(t *testing.T) *Service {
 	if err != nil {
 		t.Fatalf("打开测试库失败: %v", err)
 	}
-	if err := db.AutoMigrate(&model.ImagePreset{}); err != nil {
-		t.Fatalf("迁移预设表失败: %v", err)
+	if err := db.AutoMigrate(model.AllModels()...); err != nil {
+		t.Fatalf("迁移模型失败: %v", err)
 	}
 	cfg, err := config.Load("presettest")
 	if err != nil {
 		t.Fatalf("加载测试配置失败: %v", err)
 	}
-	return New(db, cfg)
+	svc := New(db, cfg)
+	svc.SetHistoryRoot(t.TempDir())
+	return svc
 }
 
 func requireValidation(t *testing.T, err error) {
@@ -230,18 +232,12 @@ func TestImageSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetImageSettings 失败: %v", err)
 	}
-	if defaults.Rules.OutputFormat != "keep" || defaults.Rules.TargetBytes != 0 ||
-		defaults.Rules.MaxWidth != 0 || defaults.Rules.MaxHeight != 0 {
-		t.Fatalf("默认规则不对：%+v", defaults.Rules)
-	}
-	if defaults.Output != (OutputPlan{}) {
-		t.Fatalf("默认输出目的地不对：%+v", defaults.Output)
+	if defaults.OutputFormat != "keep" || defaults.TargetBytes != 0 ||
+		defaults.MaxWidth != 0 || defaults.MaxHeight != 0 {
+		t.Fatalf("默认设置不对：%+v", defaults)
 	}
 
-	want := ImageSettings{
-		Rules:  BatchRules{OutputFormat: "webp", TargetBytes: 512 * 1024, MaxWidth: 1920, MaxHeight: 1080},
-		Output: OutputPlan{Mode: OutputModeCustomTree, Directory: t.TempDir(), Pattern: "{n}-{name}"},
-	}
+	want := BatchRules{OutputFormat: "webp", TargetBytes: 512 * 1024, MaxWidth: 1920, MaxHeight: 1080}
 	if err := svc.SaveImageSettings(want); err != nil {
 		t.Fatalf("SaveImageSettings 失败: %v", err)
 	}
@@ -256,19 +252,17 @@ func TestImageSettingsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("重新加载设置失败: %v", err)
 	}
-	if got.Rules != want.Rules || got.Output != want.Output {
+	if got != want {
 		t.Errorf("设置的往返结果 = %+v，期望 %+v", got, want)
 	}
 
-	invalid := ImageSettings{Rules: BatchRules{OutputFormat: "jpeg", TargetBytes: 1500}, Output: want.Output}
+	invalid := BatchRules{OutputFormat: "jpeg", TargetBytes: 1500}
 	requireValidation(t, svc.SaveImageSettings(invalid))
-	badOutput := ImageSettings{Rules: want.Rules, Output: OutputPlan{Mode: OutputModeCustomFlat}}
-	requireValidation(t, svc.SaveImageSettings(badOutput))
 	got, err = svc.GetImageSettings()
 	if err != nil {
 		t.Fatalf("非法保存后 Get 失败: %v", err)
 	}
-	if got.Rules != want.Rules || got.Output != want.Output {
+	if got != want {
 		t.Errorf("非法保存不应覆盖旧设置：%+v", got)
 	}
 }

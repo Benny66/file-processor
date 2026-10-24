@@ -4,6 +4,7 @@ import (
 	"embed"
 	"log"
 	"log/slog"
+	"path/filepath"
 	"time"
 
 	"github.com/wailsapp/wails/v2"
@@ -14,6 +15,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
+	"file-processor/internal/appdir"
 	"file-processor/internal/apperr"
 	"file-processor/internal/appinfo"
 	"file-processor/internal/config"
@@ -99,7 +101,16 @@ func main() {
 		// 配置是可选项：丢失/损坏时用默认值继续启动，避免用户被一个坏文件挡在门外。
 		slog.Warn("配置不可用，已回退默认值", "err", err)
 	}
-	app := NewApp(service.New(db, cfg), cfg)
+	svc := service.New(db, cfg)
+	// 暂存区（ADR-0007）：处理结果先进应用数据目录的 history/，下载是唯一落盘出口。
+	// 启动时修剪历史（保留最近 N 次的可下载暂存，D-56），失败不阻断启动。
+	if historyDir, err := appdir.Dir(appName); err == nil {
+		svc.SetHistoryRoot(filepath.Join(historyDir, "history"))
+		if err := svc.PruneHistory(); err != nil {
+			slog.Warn("历史修剪失败（不影响使用）", "err", err)
+		}
+	}
+	app := NewApp(svc, cfg)
 	boot.stage("配置加载与组装")
 
 	// 窗口几何：在【创建期】给定尺寸与最大化状态，首帧即正确。

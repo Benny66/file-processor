@@ -26,7 +26,7 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 		t.Fatalf("写入源文件失败: %v", err)
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	var progress []BatchProgress
 	result, err := svc.ProcessBatch(
 		BatchRequest{
@@ -45,8 +45,10 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	if item.Status != StatusSuccess {
 		t.Fatalf("item 状态 = %q，期望 success", item.Status)
 	}
-	if item.OutputPath != filepath.Join(dir, "photo-out.jpg") {
-		t.Errorf("输出路径 = %q", item.OutputPath)
+	// US-59（ADR-0007）：输出进暂存区（history/<批次>/0001.jpg），原图文件夹零写入。
+	stagingWant := filepath.Join(svc.historyRoot, result.BatchKey, "0001.jpg")
+	if item.OutputPath != stagingWant {
+		t.Errorf("暂存路径 = %q，期望 %q", item.OutputPath, stagingWant)
 	}
 	if item.SourceBytes != int64(len(srcBytes)) || item.OutputBytes <= 0 {
 		t.Errorf("体积统计不对：%+v", item)
@@ -90,26 +92,30 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("第二次 ProcessBatch 失败: %v", err)
 	}
+	// 第二次处理是新批次：新的暂存目录，两次结果互不覆盖；防覆盖语义在下载层验证。
 	secondPath := result2.Items[0].OutputPath
-	if secondPath != filepath.Join(dir, "photo-out-2.jpg") {
-		t.Errorf("冲突输出路径 = %q，期望 -out-2", secondPath)
+	if secondPath == item.OutputPath || result2.BatchKey == result.BatchKey {
+		t.Errorf("第二次处理应产生新暂存目录：%q vs %q", secondPath, item.OutputPath)
 	}
 	firstOutputNow, err := os.ReadFile(item.OutputPath)
 	if err != nil {
 		t.Fatalf("读取第一个输出失败: %v", err)
 	}
 	if string(firstOutputNow) != string(firstOutput) {
-		t.Errorf("已有输出被覆盖")
+		t.Errorf("已有暂存输出被覆盖")
 	}
 
+	// 源目录零写入（US-59）：除了源文件本身，不应出现任何新文件。
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("读取输出目录失败: %v", err)
 	}
-	for _, entry := range entries {
-		if strings.Contains(entry.Name(), ".imageworkshop-") {
-			t.Errorf("残留临时文件: %s", entry.Name())
+	if len(entries) != 1 || entries[0].Name() != "photo.png" {
+		names := make([]string, 0, len(entries))
+		for _, entry := range entries {
+			names = append(names, entry.Name())
 		}
+		t.Errorf("源目录应只有源文件，实际：%v", names)
 	}
 }
 
@@ -125,7 +131,7 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 		t.Fatalf("写入损坏文件失败: %v", err)
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(corrupt, valid),
@@ -172,7 +178,7 @@ func TestProcessBatchLogsEachFailure(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	if _, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(corrupt),
@@ -221,7 +227,7 @@ func TestProcessBatchReportsAlphaFlattened(t *testing.T) {
 		t.Fatalf("写入测试文件失败: %v", err)
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{Items: batchItems(path), Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
 		nil,
@@ -253,7 +259,7 @@ func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
 		t.Fatalf("写入 same 失败: %v", err)
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(within, outside, same),
@@ -271,7 +277,7 @@ func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
 		t.Errorf("within 应跳过：%+v", result.Items[0])
 	}
 	resized := result.Items[1]
-	if resized.Status != StatusSuccess || resized.OutputPath != filepath.Join(dir, "outside-out.png") {
+	if resized.Status != StatusSuccess || resized.OutputPath == "" {
 		t.Errorf("outside 应缩放成功：%+v", resized)
 	}
 	if resized.Width != 200 || resized.Height != 150 {
@@ -311,7 +317,7 @@ func TestProcessBatchTargetSize(t *testing.T) {
 	if err := os.WriteFile(src, batchNoisePNG(t, 400, 300), 0o644); err != nil {
 		t.Fatalf("写入源文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -343,7 +349,7 @@ func TestProcessBatchTargetExtreme(t *testing.T) {
 	if err := os.WriteFile(src, batchNoisePNG(t, 400, 300), 0o644); err != nil {
 		t.Fatalf("写入源文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -381,7 +387,7 @@ func TestProcessBatchTargetSkipsSmallSource(t *testing.T) {
 	if err := os.WriteFile(src, srcBytes, 0o644); err != nil {
 		t.Fatalf("写入源文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -414,7 +420,7 @@ func TestProcessBatchTargetWithBox(t *testing.T) {
 	if err := os.WriteFile(src, batchNoisePNG(t, 800, 600), 0o644); err != nil {
 		t.Fatalf("写入源文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -447,7 +453,7 @@ func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 	if err := os.WriteFile(src, batchTestPNG(t, 10, 10), 0o644); err != nil {
 		t.Fatalf("写入测试文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 
 	cases := []BatchRules{
 		{OutputFormat: "gif"},
@@ -480,7 +486,7 @@ func TestProcessBatchCancelsRemaining(t *testing.T) {
 		paths = append(paths, path)
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	var once sync.Once
 	resultCh := make(chan BatchResult, 1)
 	errCh := make(chan error, 1)
@@ -555,7 +561,7 @@ func TestProcessBatchAutoFormatPicksSmallest(t *testing.T) {
 		}
 	}
 
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -586,7 +592,7 @@ func TestProcessBatchAutoSkipsCompliant(t *testing.T) {
 	if err := os.WriteFile(src, batchTestPNG(t, 100, 50), 0o644); err != nil {
 		t.Fatalf("写入测试文件失败: %v", err)
 	}
-	svc := &Service{}
+	svc := newBatchTestService(t)
 	result, err := svc.ProcessBatch(
 		BatchRequest{
 			Items: batchItems(src),
@@ -617,6 +623,14 @@ func batchTestSource(t *testing.T, path string) []byte {
 }
 
 // batchItems 把绝对路径列表装进批次请求（RelPath 为空：source / custom_flat 模式用不到）。
+// newBatchTestService 返回注入了暂存目录的批次服务（ADR-0007 后批次必须先有暂存区）。
+func newBatchTestService(t *testing.T) *Service {
+	t.Helper()
+	svc := &Service{}
+	svc.SetHistoryRoot(t.TempDir())
+	return svc
+}
+
 func batchItems(paths ...string) []BatchItem {
 	items := make([]BatchItem, len(paths))
 	for i, path := range paths {
