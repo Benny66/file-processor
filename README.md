@@ -1,5 +1,7 @@
 # 图片工坊 / ImageWorkshop
 
+<img src="build/appicon.png" width="104" alt="图片工坊应用图标：蓝色底板上一叠照片被箭头压实">
+
 **本地批量图片处理工具**：一次拖入文件或文件夹，批量转换格式、压缩到目标体积、按宽高上限等比缩放。图片只在本机处理，不上传、不联网、不采集遥测。
 
 ![图片工坊工作台：批量处理进行中的队列与进度](docs/images/工作台-批量处理.gif)
@@ -110,6 +112,7 @@ make build        # 编译当前平台产物
 make test         # Go 测试（含架构护栏）
 make lint         # 静态检查：gofmt + Go 护栏 + go vet + ESLint + vue-tsc
 make smoke        # 冒烟：构建 → 启动 → 断言产物 → 清理
+make icon         # 改 build/*.svg 后重新派生图标资产（appicon / ico / tray / dmg 模板，ADR-0008）
 ```
 
 > 首次 clone 后先跑 `make build` 再跑 `make test`：根包用 `//go:embed` 嵌入 `frontend/dist`，
