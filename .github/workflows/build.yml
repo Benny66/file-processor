@@ -87,6 +87,19 @@ jobs:
       - name: Build and package .deb
         run: bash scripts/package.sh linux
 
+      # 元数据断言：架构/包名/版本任一不符即红（package-deb.sh 只写不校验，这里补上）
+      - name: 校验 .deb 元数据
+        run: |
+          set -euo pipefail
+          APP="$(node -p "require('./wails.json').outputfilename")"
+          V="$(node -p "require('./wails.json').info.productVersion")"
+          DEB="build/bin/${APP}_${V}_amd64.deb"
+          [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --info "$DEB" > /tmp/deb-info.txt
+          grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
+          grep -E '^ Architecture: amd64$' /tmp/deb-info.txt
+          grep -E "^ Version: ${V}$" /tmp/deb-info.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: linux-deb
@@ -112,6 +125,19 @@ jobs:
 
       - name: Build and package arm64 .deb (Docker 交叉)
         run: bash scripts/package.sh linux user arm64
+
+      # 元数据断言：错架构/错版本的包发出去就是「装上跑不起来」（与 amd64 腿同款）
+      - name: 校验 .deb 元数据
+        run: |
+          set -euo pipefail
+          APP="$(node -p "require('./wails.json').outputfilename")"
+          V="$(node -p "require('./wails.json').info.productVersion")"
+          DEB="build/bin/${APP}_${V}_arm64.deb"
+          [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --info "$DEB" > /tmp/deb-info.txt
+          grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
+          grep -E '^ Architecture: arm64$' /tmp/deb-info.txt
+          grep -E "^ Version: ${V}$" /tmp/deb-info.txt
 
       - uses: actions/upload-artifact@v4
         with:

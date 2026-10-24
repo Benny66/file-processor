@@ -272,6 +272,7 @@ import {
   InspectImage,
   ListPresets,
   ProcessBatch,
+  RenderOutputSample,
   SaveImageSettings,
   ScanPaths,
   SelectDirectory,
@@ -284,7 +285,7 @@ import { useEvent } from '../../composables/useEvent'
 import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, ItemStatus, OutputFormat, OutputMode, isRetryableStatus, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
+import { BoxDimension, ItemStatus, OutputFormat, OutputMode, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
 import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
@@ -292,15 +293,7 @@ import PresetDialog from './PresetDialog.vue'
 import TuneDialog from './TuneDialog.vue'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
-import type {
-  BatchResult,
-  ImageProgress,
-  ItemResult,
-  Preset,
-  PresetRules,
-  QueueItem,
-  ScanResult,
-} from './types'
+import { isRetryableStatus, type BatchResult, type ImageProgress, type ItemResult, type Preset, type PresetRules, type QueueItem, type ScanResult } from './types'
 
 // 导入格式清单取自 Go（imageproc.supportedFormats 的展示投影）。
 // 此前这里是手写字符串：往引擎加一种格式，界面这句话不会跟着变。
@@ -363,19 +356,34 @@ const currentSettings = computed(() => ({
   output: outputPlan.value,
 }))
 
-// 命名示例：用队列第一张（或 photo.jpg 样例）实时渲染模板效果。
-const namingExample = computed(() => {
-  const sample = items.value.find((item) => !item.error)?.name ?? 'photo.jpg'
-  const stem = sample.replace(/\.[^.]+$/, '') || sample
-  const ext =
-    outputFormat.value === OutputFormat.Keep
-      ? (sample.match(/\.[^.]+$/)?.[0] ?? '.png')
-      : `.${outputFormat.value === OutputFormat.JPEG ? 'jpg' : outputFormat.value}`
-  const rendered = (outputPattern.value || '{name}-out')
-    .replaceAll('{name}', stem)
-    .replaceAll('{n}', '1')
-  return `${sample} → ${rendered}${ext}`
-})
+// 命名示例（US-41）：渲染走 Go 的 RenderOutputSample——模板替换与扩展名映射和真实
+// 落盘同一套实现。此前前端手抄了 renderOutputStem 与格式→扩展名表，边界迟早分叉。
+const namingExample = ref('photo.jpg → photo-out.jpg')
+const namingSample = computed(() => items.value.find((item) => !item.error)?.name ?? 'photo.jpg')
+let namingToken = 0
+let namingTimer: ReturnType<typeof setTimeout> | null = null
+async function refreshNamingExample() {
+  const token = ++namingToken
+  try {
+    const rendered = await invoke(
+      () => RenderOutputSample(outputPattern.value, namingSample.value, outputFormat.value),
+      'RenderOutputSample',
+    )
+    if (token === namingToken && !disposed) {
+      namingExample.value = `${namingSample.value} → ${rendered}`
+    }
+  } catch {
+    // 模板/格式非法：具体原因由规则预检（ruleProblem）展示，这里只标注示例不可用。
+    if (token === namingToken) namingExample.value = '命名示例不可用（见上方提示）'
+  }
+}
+watch([outputPattern, outputFormat, namingSample], () => {
+  if (namingTimer) clearTimeout(namingTimer)
+  namingTimer = setTimeout(() => {
+    namingTimer = null
+    void refreshNamingExample()
+  }, 200)
+}, { immediate: true })
 
 // 「能不能开始」由 Go 判定（US-11），前端只转述它给的原因。
 //

@@ -58,6 +58,10 @@ export function ProcessBatch(arg1) {
   return window['go']['main']['App']['ProcessBatch'](arg1);
 }
 
+export function RenderOutputSample(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenderOutputSample'](arg1, arg2, arg3);
+}
+
 export function RenderPreview(arg1, arg2) {
   return window['go']['main']['App']['RenderPreview'](arg1, arg2);
 }

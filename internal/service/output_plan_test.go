@@ -225,6 +225,126 @@ func TestProcessBatchCustomTreeRejectsTraversal(t *testing.T) {
 	}
 }
 
+// TestProcessBatchCustomDirCreationFailsBeforeAnyWork US-39：输出目录创建失败必须在
+// 批次开始前以 Validation 报出（本测试用「路径被普通文件挡住」制造 MkdirAll 失败），
+// 而不是整批逐项做完编码才逐项失败。
+func TestProcessBatchCustomDirCreationFailsBeforeAnyWork(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "x.png")
+	if err := os.WriteFile(src, batchTestPNG(t, 20, 10), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+	blocker := filepath.Join(dir, "blocker")
+	if err := os.WriteFile(blocker, []byte("file"), 0o644); err != nil {
+		t.Fatalf("写入占位文件失败: %v", err)
+	}
+
+	svc := &Service{}
+	_, err := svc.ProcessBatch(BatchRequest{
+		Items:  batchItems(src),
+		Rules:  BatchRules{OutputFormat: imageproc.OutputJPEG},
+		Output: OutputPlan{Mode: OutputModeCustomFlat, Directory: filepath.Join(blocker, "out")},
+	}, nil)
+	var ae *apperr.Error
+	if !errors.As(err, &ae) || ae.Code != apperr.CodeValidation || !strings.Contains(err.Error(), "输出目录") {
+		t.Fatalf("期望批次前的目录创建 Validation，实际：%v", err)
+	}
+	// 源目录不应出现任何 -out 产物（批次没有处理任何文件）。
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("读取目录失败: %v", err)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), "-out") {
+			t.Errorf("目录创建失败后不应有产物：%s", entry.Name())
+		}
+	}
+}
+
+// TestProcessBatchCustomSkippedProducesNothing custom 模式下「已达标」语义不变：
+// 不产出文件、不写到输出目录。
+func TestProcessBatchCustomSkippedProducesNothing(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "small.png")
+	if err := os.WriteFile(src, batchTestPNG(t, 100, 50), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+	outDir := filepath.Join(t.TempDir(), "out")
+	svc := &Service{}
+	result, err := svc.ProcessBatch(BatchRequest{
+		Items:  batchItems(src),
+		Rules:  BatchRules{OutputFormat: imageproc.OutputKeep, TargetBytes: 1024 * 1024},
+		Output: OutputPlan{Mode: OutputModeCustomFlat, Directory: outDir},
+	}, nil)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if result.Items[0].Status != StatusSkipped || result.Items[0].OutputPath != "" {
+		t.Fatalf("custom 模式下已达标语义应不变：%+v", result.Items[0])
+	}
+	if _, err := os.Stat(filepath.Join(outDir, "small-out.png")); !os.IsNotExist(err) {
+		t.Errorf("跳过项不应产出文件")
+	}
+}
+
+// TestProcessBatchSubsetReturnsOnlyRequested 队列内重跑（US-43）依赖的 Go 侧契约：
+// 批次接口无状态，只返回请求中列出的项——重跑即对它做子集调用。
+func TestProcessBatchSubsetReturnsOnlyRequested(t *testing.T) {
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.png")
+	b := filepath.Join(dir, "b.png")
+	if err := os.WriteFile(a, batchTestPNG(t, 20, 10), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+	if err := os.WriteFile(b, batchTestPNG(t, 20, 10), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(BatchRequest{
+		Items: batchItems(b), // 队列里有两张，批次只请求 b
+		Rules: BatchRules{OutputFormat: imageproc.OutputJPEG},
+	}, nil)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	if len(result.Items) != 1 || result.Items[0].Path != b {
+		t.Fatalf("子集请求应只返回请求项：%+v", result.Items)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "a-out.jpg")); !os.IsNotExist(err) {
+		t.Errorf("未被请求的文件不应被处理")
+	}
+}
+
+// TestRenderOutputSample 命名预览与真实落盘同一套实现（US-41）：默认模板、自定义
+// 模板、keep 沿用样例扩展名、auto 以 <自动> 占位、非法模板报 Validation。
+func TestRenderOutputSample(t *testing.T) {
+	svc := &Service{}
+	cases := []struct {
+		name, pattern, sample, format, want string
+	}{
+		{"默认模板", "", "photo.jpg", imageproc.OutputJPEG, "photo-out.jpg"},
+		{"序号模板", "img-{n}", "photo.jpg", imageproc.OutputPNG, "img-1.png"},
+		{"keep 沿用扩展名", "{name}-web", "Shot.PNG", imageproc.OutputKeep, "Shot-web.png"},
+		{"auto 占位", "{name}-out", "photo.jpg", imageproc.OutputAuto, "photo-out.<自动>"},
+	}
+	for _, tc := range cases {
+		got, err := svc.RenderOutputSample(tc.pattern, tc.sample, tc.format)
+		if err != nil {
+			t.Errorf("%s：不应失败：%v", tc.name, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%s：示例 = %q，期望 %q", tc.name, got, tc.want)
+		}
+	}
+	if _, err := svc.RenderOutputSample("photo", "photo.jpg", imageproc.OutputJPEG); err == nil {
+		t.Error("缺变量的模板应报错")
+	}
+	if _, err := svc.RenderOutputSample("", "photo.jpg", "gif"); err == nil {
+		t.Error("非法格式应报错")
+	}
+}
+
 // TestPlaceOutputFallsBackWhenLinkUnavailable D-37：链接不可用（网络盘等）时
 // 退化为独占创建+复制，防覆盖与序号递增语义不变。
 func TestPlaceOutputFallsBackWhenLinkUnavailable(t *testing.T) {

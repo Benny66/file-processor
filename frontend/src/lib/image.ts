@@ -29,11 +29,6 @@ export const ItemStatus = {
 /** 处理状态取值类型。 */
 export type ItemStatusValue = (typeof ItemStatus)[keyof typeof ItemStatus]
 
-/** 结果态是否可重跑：失败与已取消（US-43，重跑集合=两者，按钮文案明示）。 */
-export function isRetryableStatus(status: string): boolean {
-  return status === ItemStatus.Failed || status === ItemStatus.Canceled
-}
-
 /** 尺寸盒宽高上下界。单一真相在 Go 的 internal/service（BoxMinDimension / BoxMaxDimension）。 */
 export const BoxDimension = {
   Min: 1,

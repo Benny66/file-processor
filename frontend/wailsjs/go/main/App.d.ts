@@ -34,6 +34,8 @@ export function PreviewConvert(arg1:string,arg2:service.BatchRules):Promise<serv
 
 export function ProcessBatch(arg1:service.BatchRequest):Promise<service.BatchResult>;
 
+export function RenderOutputSample(arg1:string,arg2:string,arg3:string):Promise<string>;
+
 export function RenderPreview(arg1:string,arg2:number):Promise<imageproc.Preview>;
 
 export function SaveImageSettings(arg1:service.ImageSettings):Promise<void>;

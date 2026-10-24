@@ -191,6 +191,12 @@ func (a *App) PreviewConvert(path string, rules service.BatchRules) (service.Pre
 	return a.svc.PreviewConvert(path, rules)
 }
 
+// RenderOutputSample 渲染命名模板的示例输出文件名（US-41）：模板替换与扩展名映射的
+// 单一真相在 service（与真实落盘同一套），前端预览不自带第二份实现。
+func (a *App) RenderOutputSample(pattern, sampleName, outputFormat string) (string, error) {
+	return a.svc.RenderOutputSample(pattern, sampleName, outputFormat)
+}
+
 // ValidateImageRules 在发起批次之前预检规则与输出目的地，返回可直接展示的提示文案；合法时返回空串。
 // 判定与文案的单一真相都在 service，前端不再比较大小、也不再抄一份提示。
 func (a *App) ValidateImageRules(rules service.BatchRules, output service.OutputPlan) string {

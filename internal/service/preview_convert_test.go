@@ -117,3 +117,20 @@ func TestPreviewConvertRejectsInvalidRules(t *testing.T) {
 		t.Fatal("非法格式应返回错误")
 	}
 }
+
+// TestPreviewConvertCorruptFileIsReadableError 损坏图经 ProbeImage 走可读错误路径
+// （与批次同一前置），调参弹窗把它当失败态展示而不是崩溃。
+func TestPreviewConvertCorruptFileIsReadableError(t *testing.T) {
+	corrupt := filepath.Join(t.TempDir(), "bad.jpg")
+	if err := os.WriteFile(corrupt, []byte("not an image"), 0o644); err != nil {
+		t.Fatalf("写入损坏文件失败: %v", err)
+	}
+	svc := &Service{}
+	_, err := svc.PreviewConvert(corrupt, BatchRules{OutputFormat: imageproc.OutputJPEG})
+	if err == nil {
+		t.Fatal("损坏文件应返回错误")
+	}
+	if !strings.Contains(err.Error(), "无法识别") {
+		t.Errorf("错误应可读（含原因）：%v", err)
+	}
+}

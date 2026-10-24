@@ -70,9 +70,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ItemStatus, isRetryableStatus, type ItemStatusValue } from '../../lib/image'
+import { ItemStatus, type ItemStatusValue } from '../../lib/image'
 import { formatBytes } from './format'
-import type { QueueItem } from './types'
+import { isRetryableStatus, type QueueItem } from './types'
 
 const props = defineProps<{ item: QueueItem; busy: boolean; stale: boolean }>()
 const emit = defineEmits<{

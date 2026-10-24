@@ -1,3 +1,4 @@
+import { ItemStatus } from '../../lib/image'
 import type {
   InspectImage,
   ListPresets,
@@ -43,4 +44,15 @@ export type QueueItem = ScannedFile & {
   queued: boolean
   /** 该项正被 worker 处理（来自 Go 的 started 事件，前端不自己猜）。 */
   processing: boolean
+}
+
+/**
+ * 结果态是否可发起队列内重跑（US-43/D-38a：失败与已取消）。
+ *
+ * 为什么在 views 层而不是 lib/image.ts：lib/* 是契约镜像文件，只许放常量与类型——
+ * 这是交互策略而非镜像。Go 侧没有也不需要同一判定（重跑只是对无状态批次接口的
+ * 子集调用），集中一处供 QueueRow 与 ImageWorkbench 共用即可。
+ */
+export function isRetryableStatus(status: string): boolean {
+  return status === ItemStatus.Failed || status === ItemStatus.Canceled
 }

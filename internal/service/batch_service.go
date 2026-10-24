@@ -146,14 +146,26 @@ func renderOutputStem(pattern, stem string, index int) string {
 	return strings.ReplaceAll(out, "{n}", strconv.Itoa(index))
 }
 
-// resolveOutputDir 计算某一项的输出目录。
-// 返回值二表示是否允许目录不存在（custom 模式由调用方 MkdirAll）。
-func resolveOutputDir(item BatchItem, plan OutputPlan) (string, bool, error) {
+// ensureOutputDir 为 custom 模式创建输出根目录（幂等；source 模式无需创建）。
+// 只负责根目录：custom_tree 的子目录随逐项落位创建（导入结构不可提前枚举）。
+// convertOnce 内的 MkdirAll 保留为防御性兜底（批次运行中目录被删等极端情形）。
+func ensureOutputDir(plan OutputPlan) error {
+	switch plan.Mode {
+	case OutputModeCustomFlat, OutputModeCustomTree:
+		if err := os.MkdirAll(filepath.Clean(plan.Directory), 0o755); err != nil {
+			return apperr.Validation(fmt.Sprintf("无法创建输出目录: %v", err))
+		}
+	}
+	return nil
+}
+
+// resolveOutputDir 计算某一项的输出目录；custom_tree 模式按相对路径下钻子目录。
+func resolveOutputDir(item BatchItem, plan OutputPlan) (string, error) {
 	switch plan.Mode {
 	case "", OutputModeSource:
-		return filepath.Dir(item.Path), false, nil
+		return filepath.Dir(item.Path), nil
 	case OutputModeCustomFlat:
-		return filepath.Clean(plan.Directory), true, nil
+		return filepath.Clean(plan.Directory), nil
 	case OutputModeCustomTree:
 		rel := filepath.Clean(item.RelPath)
 		if rel == "" || rel == "." {
@@ -162,11 +174,11 @@ func resolveOutputDir(item BatchItem, plan OutputPlan) (string, bool, error) {
 		// RelPath 理论上只来自扫描（不含 ..），但绑定入参不可信：
 		// 这里挡住路径穿越，防止把输出写到指定目录之外。
 		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", false, apperr.Validation("输出相对路径非法")
+			return "", apperr.Validation("输出相对路径非法")
 		}
-		return filepath.Join(filepath.Clean(plan.Directory), filepath.Dir(rel)), true, nil
+		return filepath.Join(filepath.Clean(plan.Directory), filepath.Dir(rel)), nil
 	default:
-		return "", false, apperr.Validation("输出模式取值非法")
+		return "", apperr.Validation("输出模式取值非法")
 	}
 }
 
@@ -259,6 +271,11 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 		return BatchResult{}, apperr.Validation("没有可处理的图片")
 	}
 	if err := validateBatchStart(req.Rules, req.Output); err != nil {
+		return BatchResult{}, err
+	}
+	// US-39：自定义输出目录的创建放在批次开始前——目录不可写在这里报 Validation，
+	// 而不是让整批逐项做完编码才失败（那会白跑一整批转换）。
+	if err := ensureOutputDir(req.Output); err != nil {
 		return BatchResult{}, err
 	}
 
@@ -450,7 +467,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		return res
 	}
 	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	dir, _, err := resolveOutputDir(item, output)
+	dir, err := resolveOutputDir(item, output)
 	if err != nil {
 		res.Status = StatusFailed
 		res.Message = err.Error()
@@ -621,6 +638,38 @@ func formatDisplayName(format string) string {
 		return "WebP"
 	default:
 		return format
+	}
+}
+
+// RenderOutputSample 把命名模板与输出格式渲染成示例文件名，供规则区实时预览（US-41）。
+// 模板替换与扩展名映射与真实落盘共用同一套实现（renderOutputStem/outputExtension）——
+// 预览若是第二份实现，边界（未知占位符、keep 扩展名、auto）迟早分叉。
+// auto 格式的扩展名逐项而定，示例以 <自动> 占位。sampleName 非法时返回错误。
+func (s *Service) RenderOutputSample(pattern, sampleName, outputFormat string) (string, error) {
+	if err := validateOutputPlan(OutputPlan{Mode: OutputModeSource, Pattern: pattern}); err != nil {
+		return "", err
+	}
+	stem := strings.TrimSuffix(sampleName, filepath.Ext(sampleName))
+	rendered := renderOutputStem(pattern, stem, 1)
+	switch outputFormat {
+	case imageproc.OutputKeep:
+		// 保持原格式：示例沿用样例文件自己的扩展名（无扩展名的极端情形按 PNG 展示，
+		// 与 keep 对 BMP/TIFF/GIF 的兜底一致）。
+		ext := strings.ToLower(filepath.Ext(sampleName))
+		if ext == "" {
+			ext = ".png"
+		}
+		return rendered + ext, nil
+	case imageproc.OutputJPEG, imageproc.OutputPNG, imageproc.OutputWebP:
+		ext, err := outputExtension(outputFormat)
+		if err != nil {
+			return "", err
+		}
+		return rendered + ext, nil
+	case imageproc.OutputAuto:
+		return rendered + ".<自动>", nil
+	default:
+		return "", apperr.Validation("输出格式非法")
 	}
 }
 

@@ -23,9 +23,9 @@ type PreviewConvertResult struct {
 	PreviewURL      string `json:"preview_url"`
 }
 
-// previewMaxEdge 是工作台预览的渲染上限：取 imageproc 允许的最大值（2048）。
-// 放大镜在这个分辨率上做预览级缩放（D-40：不做像素级，规格 §6 边界维持）。
-const previewMaxEdge = 2048
+// previewMaxEdge 是工作台预览的渲染上限：直接取 imageproc 的合法上界常量，
+// 不再抄一份 2048——上界调整时两处数值漂移不会有任何症状。
+const previewMaxEdge = imageproc.PreviewMaxMaxEdge
 
 // PreviewConvert 用给定规则对单张图做一次真实试算（US-46），不写出任何文件：
 // 读取上限/内容探测/已达标判定（shouldSkipConvert）与批次完全同一套；
