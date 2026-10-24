@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1080px; height:1440px; overflow:hidden; }
+  body { font-family:"PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;
+    background:#0B0D12; color:#fff; position:relative; }
+  .glow{ position:absolute; width:820px;height:820px; left:-220px; top:-240px;
+    background:radial-gradient(circle,rgba(122,158,255,.28) 0%,rgba(122,158,255,0) 68%); }
+  .wrap{ position:relative; padding:74px 68px; height:100%; display:flex; flex-direction:column; }
+
+  .kicker{ display:inline-flex; align-self:flex-start; padding:12px 24px; border-radius:10px;
+    background:rgba(255,196,84,.1); border:1px solid rgba(255,196,84,.28);
+    font-size:26px; color:#FFC454; letter-spacing:.1em; font-weight:600; }
+
+  h2{ margin-top:36px; font-size:82px; line-height:1.24; font-weight:900; letter-spacing:-.01em; color:#F4F6FA; }
+  h2 .dim{ color:#7A8699; }
+
+  .list{ margin-top:60px; display:flex; flex-direction:column; gap:26px; flex:1; }
+  .item{ display:flex; gap:28px; padding:34px 34px 34px 30px; border-radius:20px;
+    background:rgba(255,255,255,.045); border:1px solid rgba(255,255,255,.085); }
+  .no{ flex-shrink:0; width:56px; height:56px; border-radius:14px; display:flex;
+    align-items:center; justify-content:center; font-size:30px; font-weight:800;
+    background:rgba(122,158,255,.16); color:#9BB6FF; border:1px solid rgba(122,158,255,.3); }
+  .txt{ flex:1; }
+  .txt .t{ font-size:40px; font-weight:700; color:#EAEFF8; line-height:1.4; }
+  .txt .d{ margin-top:12px; font-size:30px; color:#8B95A8; line-height:1.55; }
+  .txt .d em{ font-style:normal; color:#D9E1F0; }
+
+  .foot{ margin-top:34px; padding-top:30px; border-top:1px solid rgba(255,255,255,.09);
+    font-size:30px; color:#6F7A8E; line-height:1.6; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="kicker">内 网 办 公 图 鉴</div>
+    <h2>在没有外网的电脑上<br>干活，是种<span class="dim">什么体验</span></h2>
+
+    <div class="list">
+      <div class="item">
+        <div class="no">01</div>
+        <div class="txt">
+          <div class="t">材料要交，系统卡 5 MB</div>
+          <div class="d">一张扫描件 <em>40 MB</em>，打开「图片工具」，另存三次，还是超</div>
+        </div>
+      </div>
+      <div class="item">
+        <div class="no">02</div>
+        <div class="txt">
+          <div class="t">想发个文件，微信在转圈</div>
+          <div class="d">最后解决方案是：<em>U 盘拷到有网的电脑</em>，再传出去（还得先过审）</div>
+        </div>
+      </div>
+      <div class="item">
+        <div class="no">03</div>
+        <div class="txt">
+          <div class="t">装个软件要走流程</div>
+          <div class="d">申请表、领导签字、信息中心测试，<em>两周后批下来</em>，版本还是旧的</div>
+        </div>
+      </div>
+      <div class="item">
+        <div class="no">04</div>
+        <div class="txt">
+          <div class="t">「你把图传到网上压一下」</div>
+          <div class="d">这句话在内网里是<em>违规</em>的。文件不能出内网，这不是懒，是规矩</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">每一条都是我替朋友装软件时听到的，不是编的。</div>
+  </div>
+</body>
+</html>

@@ -229,8 +229,13 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           DEB="build/bin/${APP}_${V}_amd64.deb"
           [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
-          dpkg-deb --version | head -1  # 环境漂移排查线（2026-10 ubuntu-latest→26 舰队混编时容器腿误红过）
-          dpkg-deb --info "$DEB" > /tmp/deb-info.txt
+          # 诊断遥测：job 日志需管理员权限，失败细节进 annotation（公开 API 可读，2026-10-24 排障）
+          dpkg-deb --version | head -1
+          ls -la build/bin/ || true
+          if ! dpkg-deb --info "$DEB" > /tmp/deb-info.txt 2>/tmp/deb-err.txt; then
+            echo "::error title=dpkg-deb --info 失败::$(dpkg-deb --version | head -1) | $(head -c 300 /tmp/deb-err.txt | tr '\n' ' ') | $(ls -la "$DEB" | tr -s ' ') | 头部:$(head -c 60 "$DEB" | od -An -c | tr '\n' ' ' | head -c 200)"
+            exit 2
+          fi
           grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
           grep -E '^ Architecture: amd64$' /tmp/deb-info.txt
           grep -E "^ Version: ${V}$" /tmp/deb-info.txt

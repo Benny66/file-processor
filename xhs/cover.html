@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1080px; height:1440px; overflow:hidden; }
+  body {
+    font-family: "PingFang SC","Hiragino Sans GB","Heiti SC",-apple-system,sans-serif;
+    background:#0B0D12; color:#fff; position:relative;
+  }
+  .glow1{ position:absolute; width:900px; height:900px; left:-200px; top:-260px;
+    background:radial-gradient(circle, rgba(122,158,255,.36) 0%, rgba(122,158,255,0) 68%); }
+  .glow2{ position:absolute; width:720px; height:720px; right:-240px; top:560px;
+    background:radial-gradient(circle, rgba(255,196,84,.15) 0%, rgba(255,196,84,0) 70%); }
+  .grid{ position:absolute; inset:0;
+    background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+    background-size:60px 60px;
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 58%,transparent 90%); }
+
+  .wrap{ position:relative; padding:70px 68px 0; height:1440px; display:flex; flex-direction:column; }
+
+  .pill{ display:inline-flex; align-items:center; gap:12px; align-self:flex-start;
+    padding:15px 28px; border-radius:999px; background:rgba(122,158,255,.13);
+    border:1px solid rgba(122,158,255,.34); font-size:29px; letter-spacing:.05em;
+    color:#BFD0FF; font-weight:500; }
+  .dot{ width:13px;height:13px;border-radius:50%; background:#7A9EFF; box-shadow:0 0 16px #7A9EFF; }
+
+  h1{ margin-top:46px; font-size:120px; line-height:1.16; font-weight:900; letter-spacing:-.02em; }
+  h1 .l1{ display:block; color:#F4F6FA; }
+  h1 .l2{ display:block; margin-top:2px; color:#F4F6FA; }
+  h1 .hl{ color:#F4F6FA;
+    background:linear-gradient(180deg, transparent 60%, rgba(122,158,255,.55) 60%, rgba(122,158,255,.55) 93%, transparent 93%);
+    padding:0 6px; margin:0 -6px; }
+
+  .sub{ margin-top:30px; font-size:34px; line-height:1.6; color:#96A0B6; }
+  .sub b{ color:#E6EAF2; font-weight:600; }
+
+  .shotwrap{ margin-top:36px; flex:1; min-height:0; overflow:hidden;
+    border-radius:22px 22px 0 0; border:1px solid rgba(255,255,255,.13); border-bottom:none;
+    box-shadow:0 -2px 0 rgba(255,255,255,.02), 0 30px 90px rgba(0,0,0,.8);
+    background:#12151C;
+    -webkit-mask-image:linear-gradient(180deg,#000 0%,#000 74%,rgba(0,0,0,0) 99%); }
+  .shotwrap img{ display:block; width:100%; }
+
+  .tags{ display:flex; gap:14px; padding:26px 0 58px; }
+  .tag{ flex:1; text-align:center; padding:22px 0;
+    background:rgba(255,255,255,.055); border:1px solid rgba(255,255,255,.1);
+    border-radius:16px; font-size:28px; color:#C9D2E3; font-weight:500; }
+</style>
+</head>
+<body>
+  <div class="glow1"></div><div class="glow2"></div><div class="grid"></div>
+
+  <div class="wrap">
+    <div class="pill"><span class="dot"></span>内网办公 · 全程离线</div>
+
+    <h1>
+      <span class="l1">不能联网的电脑，</span>
+      <span class="l2"><span class="hl">压图怎么办</span></span>
+    </h1>
+
+    <div class="sub">
+      上传不了、装不了插件、还卡体积<br>
+      <b>拖进去 → 定好体积 → 批量跑完</b>
+    </div>
+
+    <div class="shotwrap">
+      <img src="file:///Users/shahao/Project/file-processor/docs/images/工作台-处理结果.png">
+    </div>
+
+    <div class="tags">
+      <div class="tag">不联网</div>
+      <div class="tag">不走云端</div>
+      <div class="tag">麒麟可用</div>
+    </div>
+  </div>
+</body>
+</html>

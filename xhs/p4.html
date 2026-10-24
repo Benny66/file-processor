@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { width:1080px; height:1440px; overflow:hidden; }
+  body { font-family:"PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;
+    background:#0B0D12; color:#fff; position:relative; }
+  .glow{ position:absolute; width:760px;height:760px; left:-200px; bottom:-260px;
+    background:radial-gradient(circle,rgba(255,196,84,.14) 0%,rgba(255,196,84,0) 68%); }
+  .wrap{ position:relative; padding:74px 68px; height:100%; display:flex; flex-direction:column; }
+
+  .kicker{ display:inline-flex; align-self:flex-start; padding:12px 24px; border-radius:10px;
+    background:rgba(255,196,84,.1); border:1px solid rgba(255,196,84,.28);
+    font-size:26px; color:#FFC454; letter-spacing:.1em; font-weight:600; }
+
+  h2{ margin-top:34px; font-size:80px; line-height:1.24; font-weight:900; color:#F4F6FA; }
+  h2 .dim{ color:#7A8699; }
+
+  .list{ margin-top:48px; display:flex; flex-direction:column; gap:0; flex:1; }
+  .row{ padding:30px 0; border-bottom:1px solid rgba(255,255,255,.075); }
+  .row:last-child{ border-bottom:none; }
+  .row .t{ font-size:36px; font-weight:700; color:#E8EDF6; line-height:1.4; }
+  .row .t .no{ color:#FF8B6B; font-weight:800; margin-right:14px; }
+  .row .d{ margin-top:10px; font-size:28px; color:#8B95A8; line-height:1.6; padding-left:52px; }
+
+  .foot{ margin-top:16px; font-size:30px; color:#7C8798; line-height:1.65;
+    padding:28px 32px; border-radius:16px; background:rgba(122,158,255,.07);
+    border:1px solid rgba(122,158,255,.16); }
+  .foot b{ color:#BFD0FF; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="glow"></div>
+  <div class="wrap">
+    <div class="kicker">说 点 实 话</div>
+    <h2>它做不到的事，<br><span class="dim">我先说清楚</span></h2>
+
+    <div class="list">
+      <div class="row">
+        <div class="t"><span class="no">1</span>不支持 HEIC 和 AVIF</div>
+        <div class="d">手机直出的 HEIC 要先转一次。不是忘了做，是三平台都要额外编解码器</div>
+      </div>
+      <div class="row">
+        <div class="t"><span class="no">2</span>麒麟版还没在真机上验收</div>
+        <div class="d">安装包能打出来、能装上，但飞腾和鲲鹏的真机我还没摸到</div>
+      </div>
+      <div class="row">
+        <div class="t"><span class="no">3</span>没有代码签名</div>
+        <div class="d">个人做的，没办证书。第一次打开系统会拦一下，要手动放行</div>
+      </div>
+      <div class="row">
+        <div class="t"><span class="no">4</span>输出的图不带色彩配置</div>
+        <div class="d">广色域的照片可能会有轻微偏色，交材料够用，印刷不够</div>
+      </div>
+    </div>
+
+    <div class="foot">
+      写这些不是自谦。内网里装一个东西要过审批，<b>先把丑话说前面，比装完发现不行强</b>。
+    </div>
+  </div>
+</body>
+</html>
