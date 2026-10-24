@@ -25,6 +25,12 @@ const (
 	CodeConflict = "conflict"
 	// CodeInternal 未归类的系统错误（兜底）。
 	CodeInternal = "internal"
+	// CodePDFEncrypted PDF 加了密，暂不支持处理。
+	CodePDFEncrypted = "pdf_encrypted"
+	// CodePDFSigned PDF 带数字签名，不改动它。
+	CodePDFSigned = "pdf_signed"
+	// CodePDFDamaged PDF 解析失败（可能已损坏）。
+	CodePDFDamaged = "pdf_damaged"
 )
 
 // Error 是业务错误的统一形态。

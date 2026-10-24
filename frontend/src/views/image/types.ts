@@ -8,6 +8,15 @@ import type {
 } from '../../../wailsjs/go/main/App'
 import type { service } from '../../../wailsjs/go/models'
 
+/**
+ * 按路径扩展名判断是否 PDF 项（compress-pdf）。
+ * 与 Go 的 imageproc.IsPDFPath 同一语义，但这里只服务界面分流（规则禁用、按钮显隐），
+ * 真正的处理分流以 Go 的内容嗅探为准——两者判错互不掩护。
+ */
+export function isPdfPath(path: string): boolean {
+  return path.toLowerCase().endsWith('.pdf')
+}
+
 export type ScanResult = Awaited<ReturnType<typeof ScanPaths>>
 export type ScannedFile = ScanResult['files'][number]
 export type ImageInfo = Awaited<ReturnType<typeof InspectImage>>

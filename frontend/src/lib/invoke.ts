@@ -26,6 +26,9 @@ export const ErrorCode = {
   Validation: 'validation',
   Conflict: 'conflict',
   Internal: 'internal',
+  PDFEncrypted: 'pdf_encrypted',
+  PDFSigned: 'pdf_signed',
+  PDFDamaged: 'pdf_damaged',
 } as const
 
 /**

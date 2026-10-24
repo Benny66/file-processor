@@ -20,9 +20,11 @@ var supportedFormats = []formatSpec{
 	{".tif", "tiff"},
 	{".tiff", "tiff"},
 	{".gif", "gif"},
+	// PDF 不是图片格式，但走同一条导入/队列/暂存/下载管道（compress-pdf，ADR-0009）。
+	{".pdf", "pdf"},
 }
 
-// FormatFromPath 按扩展名返回内容格式（jpeg/png/webp/bmp/tiff/gif），未知返回空串。
+// FormatFromPath 按扩展名返回内容格式（jpeg/png/webp/bmp/tiff/gif/pdf），未知返回空串。
 func FormatFromPath(path string) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	for _, spec := range supportedFormats {
@@ -57,6 +59,7 @@ var formatDisplayNames = map[string]string{
 	"bmp":  "BMP",
 	"tiff": "TIFF",
 	"gif":  "GIF（静态）",
+	"pdf":  "PDF",
 }
 
 // SupportedFormatHints 按 supportedFormats 的顺序返回去重后的展示名，供前端渲染导入提示。

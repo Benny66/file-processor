@@ -72,4 +72,4 @@ export function SupportedFormatHints():Promise<Array<string>>;
 
 export function TrayAvailable():Promise<boolean>;
 
-export function ValidateImageRules(arg1:service.BatchRules):Promise<string>;
+export function ValidateImageRules(arg1:service.BatchRules,arg2:boolean):Promise<string>;

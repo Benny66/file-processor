@@ -37,8 +37,12 @@ go:
     reason: 纯 Go WebP 有损/无损编解码（WASM 转译 libwebp），配合 nodynamic 构建标签避免系统 libwebp 依赖；用于输入解码与后续输出编码。
 
   - module: golang.org/x/image
-    version: v0.45.0
-    reason: BMP/TIFF/WebP 静态解码与 CatmullRom 缩放；002 spike 验证的版本，兼容 Go 1.25+。
+    version: v0.47.0
+    reason: BMP/TIFF/WebP 静态解码与 CatmullRom 缩放；v0.47.0 由 pdfcpu 依赖树带动（v0.45.0 → v0.47.0，同为兼容升级）。
+
+  - module: github.com/pdfcpu/pdfcpu
+    version: v0.16.3
+    reason: PDF 压缩的解析/回写底座（纯 Go、Apache-2.0）：图像 XObject 定位与无损结构优化；图像重压缩由本仓库实现（ADR-0009，compress-pdf）。
 
 # ---- 前端直接依赖（package.json 的 dependencies） ----
 frontend:

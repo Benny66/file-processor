@@ -21,6 +21,7 @@
 |---|---|
 | `internal/model/` | 数据模型 + `AllModels()` 注册表（模型唯一真相） |
 | `internal/database/` | gorm + SQLite 连接、迁移执行 |
+| `internal/imageproc/` | 图片处理纯函数层（探测/转换/预览）；`pdf.go` 是 PDF 压缩（图像重压缩 + 无损优化，ADR-0009） |
 | `internal/service/` | 业务服务层（绑定方法经此访问数据库） |
 | `internal/appdir/` | **单一真相**：应用数据目录（数据库/配置/日志/崩溃日志同目录） |
 | `internal/appinfo/` | 版本/平台/关键路径（版本注入目标见 `scripts/package.sh`） |

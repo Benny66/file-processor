@@ -18,6 +18,8 @@ func TestIsSupportedPath(t *testing.T) {
 		{"a.tif", true},
 		{"a.TIFF", true},
 		{"a.gif", true},
+		{"a.pdf", true},
+		{"a.PDF", true},
 		{"a.txt", false},
 		{"a", false},
 		{"a.jpg ", false},
@@ -47,6 +49,7 @@ func TestFormatFromPath(t *testing.T) {
 		{"a.JPG", "jpeg"},
 		{"a.jpeg", "jpeg"},
 		{"a.TIF", "tiff"},
+		{"a.pdf", "pdf"},
 		{"a.txt", ""},
 	}
 	for _, tc := range cases {

@@ -134,6 +134,6 @@ export function TrayAvailable() {
   return window['go']['main']['App']['TrayAvailable']();
 }
 
-export function ValidateImageRules(arg1) {
-  return window['go']['main']['App']['ValidateImageRules'](arg1);
+export function ValidateImageRules(arg1, arg2) {
+  return window['go']['main']['App']['ValidateImageRules'](arg1, arg2);
 }

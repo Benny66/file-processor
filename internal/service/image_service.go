@@ -106,10 +106,14 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 }
 
 // InspectImage 读取图片元信息与缩略图；失败返回可读的 apperr。
+// PDF 无像素尺寸与缩略图，返回带 format=pdf 的轻量结果（compress-pdf）。
 func (s *Service) InspectImage(path string) (imageproc.Info, error) {
 	abs, data, err := readImageFile(path)
 	if err != nil {
 		return imageproc.Info{}, err
+	}
+	if imageproc.IsPDF(data) {
+		return imageproc.InspectPDF(data, abs), nil
 	}
 	return imageproc.Inspect(data, abs)
 }

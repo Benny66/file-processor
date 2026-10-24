@@ -4,8 +4,15 @@
       class="thumb checkerboard"
       :class="{ 'thumb--failed': hasFailure, 'thumb--pending': !item.info && !hasFailure }"
     >
-      <img v-if="item.info" :src="item.info.thumbnail" alt="" />
-      <span v-else class="thumb__mark" aria-hidden="true">{{ hasFailure ? '!' : '…' }}</span>
+      <img v-if="item.info?.thumbnail" :src="item.info.thumbnail" alt="" />
+      <span
+        v-else
+        class="thumb__mark"
+        :class="{ 'thumb__mark--pdf': isPdf && !hasFailure }"
+        aria-hidden="true"
+      >
+        {{ hasFailure ? '!' : isPdf ? 'PDF' : '…' }}
+      </span>
     </div>
 
     <div class="row__main">
@@ -62,9 +69,10 @@
     >
       再试一次
     </button>
-    <!-- US-45：已检查的图可先试效果；批次运行中禁用（D-41：避免与 worker 抢 CPU）。 -->
+    <!-- US-45：已检查的图可先试效果；批次运行中禁用（D-41：避免与 worker 抢 CPU）。
+         PDF 没有可调参数，不提供（compress-pdf）。 -->
     <button
-      v-if="item.info && !item.error"
+      v-if="item.info && !item.error && !isPdf"
       class="row__compare row__tune"
       type="button"
       :disabled="busy"
@@ -82,7 +90,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ItemStatus, type ItemStatusValue } from '../../lib/image'
 import { formatBytes } from './format'
-import { isRetryableStatus, type QueueItem } from './types'
+import { isPdfPath, isRetryableStatus, type QueueItem } from './types'
 
 const props = defineProps<{
   item: QueueItem
@@ -140,6 +148,11 @@ const hasFailure = computed(
   () => props.item.result?.status === ItemStatus.Failed || !!props.item.error,
 )
 
+// PDF 项（compress-pdf）：无缩略图/尺寸，试一试与对比都不适用。
+const isPdf = computed(
+  () => props.item.info?.format === 'pdf' || isPdfPath(props.item.path),
+)
+
 const error = computed(() => {
   if (props.item.result?.status === ItemStatus.Failed) {
     return props.item.result.message || '处理失败'
@@ -171,7 +184,7 @@ const dimensions = computed(() => {
   if (result && result.width > 0) {
     return `${result.width} × ${result.height}`
   }
-  if (props.item.info) {
+  if (props.item.info && props.item.info.width > 0) {
     return `${props.item.info.width} × ${props.item.info.height}`
   }
   return ''
@@ -192,7 +205,9 @@ const outputSize = computed(() => {
 
 const canCompare = computed(
   () =>
-    props.item.result?.status === ItemStatus.Success && !!props.item.result.output_path,
+    !isPdf.value &&
+    props.item.result?.status === ItemStatus.Success &&
+    !!props.item.result.output_path,
 )
 
 const canRetry = computed(() => isRetryableStatus(props.item.result?.status ?? ''))
@@ -275,6 +290,14 @@ onUnmounted(() => {
   height: 100%;
   color: var(--text-3);
   font-size: var(--font-size-lg);
+}
+
+/* PDF 行没有缩略图，用文字标识占位（compress-pdf）。 */
+.thumb__mark--pdf {
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  letter-spacing: 0.5px;
 }
 
 .thumb--failed .thumb__mark {

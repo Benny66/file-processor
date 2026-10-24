@@ -52,7 +52,11 @@ type BatchItem struct {
 // validateBatchStart 是「能不能开始一个批次」的完整判定（US-11）：范围合法 + 至少一条有效规则。
 //
 // 「至少一条」只约束开跑，不约束保存常用设置/上次设置——用户可能先把空规则存下来。
-func validateBatchStart(rules BatchRules) error {
+// hasImages=false（纯 PDF 批）时三条规则全部无用武之地，整段校验让路（compress-pdf）。
+func validateBatchStart(rules BatchRules, hasImages bool) error {
+	if !hasImages {
+		return nil
+	}
 	if err := validateBatchRules(rules); err != nil {
 		return err
 	}
@@ -63,14 +67,14 @@ func validateBatchStart(rules BatchRules) error {
 }
 
 // ValidateImageRules 给前端做「开始处理」之前的预检：合法返回空串，否则返回
-// 可直接展示的提示文案。
+// 可直接展示的提示文案。hasImages 表示队列里是否有图片项——纯 PDF 批免规则校验。
 //
 // 为什么要有这个绑定（005→011 累计审查的修复）：此前前端在 ImageWorkbench.vue 里
 // 自己比较 targetValid/sizeBoxValid 并抄了一份中文提示，与 Go 的 validateBatchRules
 // 是【同一条规则的两个实现】，而且已经漂移——Go 有「宽高需同时设置」，前端没有，
 // 用户看到的原因与真实被拒的原因不一致。铁律 1：镜像只许复制常量与类型，不许复制逻辑。
-func (s *Service) ValidateImageRules(rules BatchRules) string {
-	if err := validateBatchStart(rules); err != nil {
+func (s *Service) ValidateImageRules(rules BatchRules, hasImages bool) string {
+	if err := validateBatchStart(rules, hasImages); err != nil {
 		return err.Error()
 	}
 	return ""
@@ -191,7 +195,16 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	if len(req.Items) == 0 {
 		return BatchResult{}, apperr.Validation("请先添加要处理的图片")
 	}
-	if err := validateBatchStart(req.Rules); err != nil {
+	// 纯 PDF 批：三条规则都不适用，免「至少一条」门槛（compress-pdf）。
+	// 混批时规则作用于图片项，照旧全量校验。
+	hasImages := false
+	for _, item := range req.Items {
+		if !imageproc.IsPDFPath(item.Path) {
+			hasImages = true
+			break
+		}
+	}
+	if err := validateBatchStart(req.Rules, hasImages); err != nil {
 		return BatchResult{}, err
 	}
 	// US-59（ADR-0007）：处理只进暂存区，原图所在文件夹零写入；下载是唯一落盘出口。
@@ -255,7 +268,7 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 				}
 				progressMu.Unlock()
 
-				res := s.convertOne(item, idx+1, req.Rules, stagingDir)
+				res := s.convertOne(ctx, item, idx+1, req.Rules, stagingDir)
 				results[idx] = res
 				progressMu.Lock()
 				done++
@@ -318,15 +331,18 @@ func (s *Service) CancelBatch() {
 // 为什么单独包一层：失败原因此前只回到前端做展示，日志里没有——用户报「有几张坏了」
 // 时无法事后核对。日志只记路径与原因，**不记图片内容**（US-26 明确要求，也避免
 // 把素材写进日志目录）。
-func (s *Service) convertOne(item BatchItem, index int, rules BatchRules, stagingDir string) ItemResult {
-	res := s.convertOnce(item, index, rules, stagingDir)
+func (s *Service) convertOne(ctx context.Context, item BatchItem, index int, rules BatchRules, stagingDir string) ItemResult {
+	res := s.convertOnce(ctx, item, index, rules, stagingDir)
 	if res.Status == StatusFailed {
 		slog.Warn("图片处理失败", "path", item.Path, "reason", res.Message)
 	}
 	return res
 }
 
-func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, stagingDir string) ItemResult {
+// compressPDFFunc 抽出 PDF 压缩调用，测试用它注入桩实现（沿用 linkOutputFile 的手法）。
+var compressPDFFunc = imageproc.CompressPDF
+
+func (s *Service) convertOnce(ctx context.Context, item BatchItem, index int, rules BatchRules, stagingDir string) ItemResult {
 	path := item.Path
 	res := ItemResult{Path: path}
 	stat, err := os.Stat(path)
@@ -353,6 +369,11 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, stagi
 		return res
 	}
 	res.SourceBytes = int64(len(data))
+
+	// PDF 走压缩管线（compress-pdf）：三条规则不适用，内容嗅探优先于图片探测。
+	if imageproc.IsPDF(data) {
+		return s.compressOnePDF(ctx, item, index, data, stagingDir)
+	}
 
 	probe, err := imageproc.ProbeImage(data, path)
 	if err != nil {
@@ -411,6 +432,58 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, stagi
 	res.ExtremeDegraded = converted.ExtremeDegraded
 	res.AlphaFlattened = converted.AlphaFlattened
 	return res
+}
+
+// compressOnePDF 处理单个 PDF：压缩并落暂存区（%04d.pdf，与图片同一套防覆盖落位）；
+// 压不动时如实标「无需处理」，不产出文件——与图片「已达标」的行为对齐（compress-pdf）。
+func (s *Service) compressOnePDF(ctx context.Context, item BatchItem, index int, data []byte, stagingDir string) ItemResult {
+	res := ItemResult{Path: item.Path, SourceBytes: int64(len(data)), Format: "pdf"}
+	out, stats, err := compressPDFFunc(ctx, data)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Message = err.Error()
+		return res
+	}
+	if int64(len(out)) >= res.SourceBytes {
+		res.Status = StatusSkipped
+		res.Message = "无需处理（PDF 已经很紧凑）"
+		return res
+	}
+	stagingName := fmt.Sprintf("%04d", index)
+	finalPath, err := writeConvertedFile(stagingDir, stagingName, ".pdf", out)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Message = fmt.Sprintf("保存到暂存区失败: %v", err)
+		return res
+	}
+	res.Status = StatusSuccess
+	res.OutputPath = finalPath
+	res.OutputBytes = int64(len(out))
+	res.Message = pdfSuccessMessage(stats)
+	return res
+}
+
+// pdfSuccessMessage 按图片统计组装诚实的结果文案，跳过必须带原因
+// （spec：「报告跳过张数及原因」；词汇以 GLOSSARY「压缩 PDF」各词条为准）。
+func pdfSuccessMessage(stats imageproc.PDFStats) string {
+	var parts []string
+	if stats.ImagesReplaced > 0 {
+		parts = append(parts, fmt.Sprintf("重新保存了 %d 张图片", stats.ImagesReplaced))
+	}
+	var reasons []string
+	if stats.ImagesUnsupported > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d 张是不支持的图片类型", stats.ImagesUnsupported))
+	}
+	if stats.ImagesNotSmaller > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d 张已经很省空间", stats.ImagesNotSmaller))
+	}
+	if len(reasons) > 0 {
+		parts = append(parts, "另 "+strings.Join(reasons, "、")+"，保持原样")
+	}
+	if len(parts) == 0 {
+		return "已压缩 PDF（清理了内部冗余）"
+	}
+	return "已压缩 PDF（" + strings.Join(parts, "，") + "）"
 }
 
 // linkOutputFile 抽出硬链接调用，测试用它模拟不支持链接的文件系统（网络盘等）。

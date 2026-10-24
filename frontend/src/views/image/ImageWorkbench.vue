@@ -51,7 +51,7 @@
           id="output-format"
           class="select"
           :value="outputFormat"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @change="onFormatChange"
         >
           <option v-for="option in formatOptions" :key="option.value" :value="option.value">
@@ -64,7 +64,7 @@
           type="checkbox"
           class="checkbox"
           :checked="sizeBoxEnabled"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @change="onBoxToggle"
         />
         <span class="field__label">限制尺寸</span>
@@ -79,7 +79,7 @@
           step="1"
           aria-label="最大宽度"
           :value="maxWidth"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @input="onMaxWidth"
         />
         <span class="field__sep">×</span>
@@ -92,7 +92,7 @@
           step="1"
           aria-label="最大高度"
           :value="maxHeight"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @input="onMaxHeight"
         />
         <span class="field__unit">px</span>
@@ -102,7 +102,7 @@
           type="checkbox"
           class="checkbox"
           :checked="targetEnabled"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @change="onTargetToggle"
         />
         <span class="field__label">压到指定大小</span>
@@ -116,14 +116,14 @@
           step="1"
           aria-label="目标体积"
           :value="targetValue"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @input="onTargetValue"
         />
         <select
           id="target-unit"
           class="select select--unit"
           :value="targetUnit"
-          :disabled="busy"
+          :disabled="rulesDisabled"
           @change="onTargetUnit"
         >
           <option value="KB">KB</option>
@@ -140,6 +140,8 @@
     </div>
     <!-- 文案来自 Go 的 validateBatchStart/validateBatchRules：判定与提示同一个出处 -->
     <p v-if="items.length > 0 && ruleProblem" class="rules__hint">{{ ruleProblem }}</p>
+    <!-- compress-pdf：纯 PDF 批没有可调规则，用说明代替「为什么都灰了」。 -->
+    <p v-if="pdfOnly" class="rules__hint">这一批都是 PDF：上面的图片规则用不上，点「开始处理」直接压缩。</p>
     <div
       v-if="processing"
       class="progress"
@@ -198,7 +200,7 @@
 
     <div v-if="items.length === 0" class="dropzone" role="region" aria-label="图片导入区">
       <div class="dropzone__icon" aria-hidden="true">＋</div>
-      <p class="dropzone__title">将图片或文件夹拖到这里</p>
+      <p class="dropzone__title">将图片、PDF 或文件夹拖到这里</p>
       <p v-if="supportedFormats" class="dropzone__hint">支持 {{ supportedFormats }}</p>
       <!-- D-46：与 README 首句同口径的隐私承诺，第一屏可见（Squoosh 先例：零成本高信任）。 -->
       <p class="dropzone__hint">所有处理在本机完成：不上传、不联网、不采集遥测</p>
@@ -284,7 +286,7 @@ import PresetDialog from './PresetDialog.vue'
 import TuneDialog from './TuneDialog.vue'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
-import { isRetryableStatus, type BatchResult, type ImageProgress, type ItemResult, type Preset, type PresetRules, type QueueItem, type ScanResult } from './types'
+import { isRetryableStatus, isPdfPath, type BatchResult, type ImageProgress, type ItemResult, type Preset, type PresetRules, type QueueItem, type ScanResult } from './types'
 
 // 导入格式清单取自 Go（imageproc.supportedFormats 的展示投影）。
 // 此前这里是手写字符串：往引擎加一种格式，界面这句话不会跟着变。
@@ -330,6 +332,12 @@ const downloadSample = ref('photo.jpg')
 const downloadableCount = computed(() => downloadable.value.size)
 
 const busy = computed(() => importing.value || processing.value)
+
+// compress-pdf：队列里是否有图片项。纯 PDF 批免「至少一条规则」门槛（判定在 Go，
+// 这里只上报队列事实）；规则区也随 pdfOnly 整体禁用。
+const hasImageItems = computed(() => items.value.some((item) => !isPdfPath(item.path)))
+const pdfOnly = computed(() => items.value.length > 0 && !hasImageItems.value)
+const rulesDisabled = computed(() => busy.value || pdfOnly.value)
 const targetBytes = computed(() =>
   targetUnit.value === 'MB' ? targetValue.value * 1024 * 1024 : targetValue.value * 1024,
 )
@@ -353,7 +361,10 @@ async function refreshRuleProblem(): Promise<void> {
   let message: string
   try {
     message =
-      (await invoke(() => ValidateImageRules(currentRules.value), 'ValidateImageRules')) ?? ''
+      (await invoke(
+        () => ValidateImageRules(currentRules.value, hasImageItems.value),
+        'ValidateImageRules',
+      )) ?? ''
   } catch (e) {
     // 预检本身失败时【失败关闭】：宁可不让开始，也不能带着未知规则开跑。
     message = e instanceof Error ? e.message : '规则校验暂时不可用'
@@ -363,7 +374,7 @@ async function refreshRuleProblem(): Promise<void> {
   if (disposed || token !== ruleToken) return
   ruleProblem.value = message
 }
-watch(currentRules, () => void refreshRuleProblem(), { immediate: true })
+watch([currentRules, hasImageItems], () => void refreshRuleProblem(), { immediate: true })
 
 const canStart = computed(
   () =>
