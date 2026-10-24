@@ -403,6 +403,8 @@ const formatOptions: { value: OutputFormatValue; label: string }[] = [
   { value: OutputFormat.JPEG, label: 'JPEG' },
   { value: OutputFormat.PNG, label: 'PNG' },
   { value: OutputFormat.WebP, label: 'WebP' },
+  // US-49：每项最多 3 次完整编码（有目标体积时最多 ~24 次整图编码），选项文案如实标注较慢。
+  { value: OutputFormat.Auto, label: '自动（最小体积，较慢）' },
 ]
 
 const {

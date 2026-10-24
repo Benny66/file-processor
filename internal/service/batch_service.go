@@ -416,16 +416,25 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		res.Message = err.Error()
 		return res
 	}
-	outFormat, err := imageproc.NormalizeOutputFormat(rules.OutputFormat, probe.Format)
-	if err != nil {
-		res.Status = StatusFailed
-		res.Message = err.Error()
-		return res
+	outFormat := ""
+	autoFormat := rules.OutputFormat == imageproc.OutputAuto
+	if !autoFormat {
+		outFormat, err = imageproc.NormalizeOutputFormat(rules.OutputFormat, probe.Format)
+		if err != nil {
+			res.Status = StatusFailed
+			res.Message = err.Error()
+			return res
+		}
 	}
 	boxEnabled := rules.MaxWidth > 0
 	targetOK := rules.TargetBytes == 0 || res.SourceBytes <= rules.TargetBytes
 	boxOK := !boxEnabled || (probe.Width <= rules.MaxWidth && probe.Height <= rules.MaxHeight)
-	if outFormat == probe.Format && targetOK && boxOK {
+	// 已达标跳过：显式格式要求「格式一致」；auto 的判定是「至少启用目标体积或尺寸盒
+	// 其一且均满足」（D-42）——两者皆未启用时不跳过：用户单独选 auto 的意图就是
+	// 重编码到最小体积格式，此时源文件谈不上「已达标」。
+	autoConstrained := rules.TargetBytes > 0 || boxEnabled
+	if (autoFormat && autoConstrained && targetOK && boxOK) ||
+		(!autoFormat && outFormat == probe.Format && targetOK && boxOK) {
 		res.Status = StatusSkipped
 		res.Message = "已达标"
 		res.Width = probe.Width
@@ -433,16 +442,24 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		return res
 	}
 
-	converted, err := imageproc.Convert(data, path, imageproc.ConvertOptions{
-		Format:      rules.OutputFormat,
-		MaxWidth:    rules.MaxWidth,
-		MaxHeight:   rules.MaxHeight,
-		TargetBytes: rules.TargetBytes,
-	})
+	var converted imageproc.Converted
+	if autoFormat {
+		converted, err = convertBestFormat(data, path, rules)
+	} else {
+		converted, err = imageproc.Convert(data, path, imageproc.ConvertOptions{
+			Format:      rules.OutputFormat,
+			MaxWidth:    rules.MaxWidth,
+			MaxHeight:   rules.MaxHeight,
+			TargetBytes: rules.TargetBytes,
+		})
+	}
 	if err != nil {
 		res.Status = StatusFailed
 		res.Message = err.Error()
 		return res
+	}
+	if autoFormat {
+		res.Message = fmt.Sprintf("自动选择 %s（最优）", formatDisplayName(converted.Format))
 	}
 	ext, err := outputExtension(converted.Format)
 	if err != nil {
@@ -555,6 +572,56 @@ func copyExclusive(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// autoFormatCandidates 是「自动（最小体积）」的候选集与平局偏好序（D-43）：
+// 平局（字节数完全相同）取先到者，JPEG 在前——兼容性最稳的格式优先。
+var autoFormatCandidates = []string{imageproc.OutputJPEG, imageproc.OutputWebP, imageproc.OutputPNG}
+
+// convertBestFormat 对同一张图逐个候选格式跑一次完整转换（含目标体积搜索），
+// 取输出体积最小者（US-49）。有目标体积时 Convert 失败即该候选不达标，
+// 全部不达标则整项失败——与单格式「不可达标即失败」的语义一致。
+// 透明图转 JPEG 的铺白候选照常参与竞速（铺白标记随所选结果回传，用户自行取舍）。
+func convertBestFormat(data []byte, path string, rules BatchRules) (imageproc.Converted, error) {
+	var best imageproc.Converted
+	var firstErr error
+	for _, format := range autoFormatCandidates {
+		converted, err := imageproc.Convert(data, path, imageproc.ConvertOptions{
+			Format:      format,
+			MaxWidth:    rules.MaxWidth,
+			MaxHeight:   rules.MaxHeight,
+			TargetBytes: rules.TargetBytes,
+		})
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if best.Data == nil || len(converted.Data) < len(best.Data) {
+			best = converted
+		}
+	}
+	if best.Data == nil {
+		if firstErr == nil {
+			firstErr = apperr.Validation("没有可用的输出格式")
+		}
+		return imageproc.Converted{}, firstErr
+	}
+	return best, nil
+}
+
+func formatDisplayName(format string) string {
+	switch format {
+	case imageproc.OutputJPEG:
+		return "JPEG"
+	case imageproc.OutputPNG:
+		return "PNG"
+	case imageproc.OutputWebP:
+		return "WebP"
+	default:
+		return format
+	}
 }
 
 func outputExtension(format string) (string, error) {

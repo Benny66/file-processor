@@ -122,6 +122,10 @@ const warning = computed(() => {
   if (props.item.result?.status === ItemStatus.Skipped) {
     parts.push(props.item.result.message || '已跳过')
   }
+  // US-49：auto 格式的「自动选择 XX（最优）」随成功结果回传，这里转述。
+  if (props.item.result?.status === ItemStatus.Success && props.item.result.message) {
+    parts.push(props.item.result.message)
+  }
   // US-20：铺白由引擎判定并回传（alpha_flattened），前端只转述不再判断。
   if (props.item.result?.alpha_flattened) {
     parts.push('透明背景已铺白')

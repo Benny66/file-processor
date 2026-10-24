@@ -169,9 +169,9 @@ watch(
 )
 
 function describeRules(preset: Preset): string {
-  const format = preset.output_format === OutputFormat.Keep
-    ? '保持原格式'
-    : preset.output_format.toUpperCase()
+  let format = preset.output_format.toUpperCase()
+  if (preset.output_format === OutputFormat.Keep) format = '保持原格式'
+  if (preset.output_format === OutputFormat.Auto) format = '自动（最小体积）'
   const target = preset.target_bytes > 0 ? `目标 ${formatBytes(preset.target_bytes)}` : '不限体积'
   const size = preset.max_width > 0 ? `${preset.max_width}×${preset.max_height}` : '不限尺寸'
   return `${format} · ${target} · ${size}`

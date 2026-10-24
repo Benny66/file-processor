@@ -25,6 +25,10 @@ const (
 	OutputPNG = "png"
 	// OutputWebP 输出 WebP。
 	OutputWebP = "webp"
+	// OutputAuto 逐项自动选择「输出体积最小」的格式（US-49，服务层选择器）。
+	// 它不是可编码格式：服务层解析出具体格式后才传入 Convert；Convert 遇到它直接报错，
+	// 防止「auto 被当普通格式静默走错编码路径」的无症状失效。
+	OutputAuto = "auto"
 )
 
 // ConvertOptions 控制一次格式转换。
@@ -62,7 +66,7 @@ const (
 // ValidateOutputFormat 校验请求的输出格式取值。
 func ValidateOutputFormat(format string) error {
 	switch format {
-	case OutputKeep, OutputJPEG, OutputPNG, OutputWebP:
+	case OutputKeep, OutputJPEG, OutputPNG, OutputWebP, OutputAuto:
 		return nil
 	default:
 		return apperr.Validation("输出格式非法")
@@ -70,6 +74,7 @@ func ValidateOutputFormat(format string) error {
 }
 
 // NormalizeOutputFormat 把输出选项解析为实际编码格式。
+// OutputAuto 原样返回：它是服务层的选择器取值（US-49），由服务层解析为具体格式后再编码。
 func NormalizeOutputFormat(format, sourceFormat string) (string, error) {
 	switch format {
 	case OutputKeep:
@@ -81,7 +86,7 @@ func NormalizeOutputFormat(format, sourceFormat string) (string, error) {
 		default:
 			return "", apperr.Validation("无法确定输出格式")
 		}
-	case OutputJPEG, OutputPNG, OutputWebP:
+	case OutputAuto, OutputJPEG, OutputPNG, OutputWebP:
 		return format, nil
 	default:
 		return "", apperr.Validation("输出格式非法")
@@ -97,6 +102,10 @@ func Convert(data []byte, path string, opts ConvertOptions) (Converted, error) {
 	outFormat, err := NormalizeOutputFormat(opts.Format, p.format)
 	if err != nil {
 		return Converted{}, err
+	}
+	if outFormat == OutputAuto {
+		// auto 是服务层选择器，不该出现在编码入口（见 OutputAuto 注释）。
+		return Converted{}, apperr.Validation("自动格式需先解析为具体格式")
 	}
 	outWidth, outHeight := FitWithin(p.width, p.height, opts.MaxWidth, opts.MaxHeight)
 	img := p.img

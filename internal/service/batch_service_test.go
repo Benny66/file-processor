@@ -530,6 +530,92 @@ func TestProcessBatchCancelsRemaining(t *testing.T) {
 	svc.CancelBatch()
 }
 
+// TestProcessBatchAutoFormatPicksSmallest US-49：auto 逐格式跑完整转换取最小体积者，
+// 并把所选格式随 Message 回传；无目标体积时三个候选都可达标，取字节数最小。
+func TestProcessBatchAutoFormatPicksSmallest(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "noise.png")
+	if err := os.WriteFile(src, batchNoisePNG(t, 400, 300), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+
+	// 基准：三种格式各自单跑的输出体积，auto 的结果必须等于三者最小值。
+	sizes := map[string]int{}
+	for _, format := range []string{imageproc.OutputJPEG, imageproc.OutputWebP, imageproc.OutputPNG} {
+		converted, err := imageproc.Convert(batchTestSource(t, src), src, imageproc.ConvertOptions{Format: format})
+		if err != nil {
+			t.Fatalf("基准转换 %s 失败: %v", format, err)
+		}
+		sizes[format] = len(converted.Data)
+	}
+	minSize := sizes[imageproc.OutputJPEG]
+	for _, size := range sizes {
+		if size < minSize {
+			minSize = size
+		}
+	}
+
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Items: batchItems(src),
+			Rules: BatchRules{OutputFormat: imageproc.OutputAuto},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	item := result.Items[0]
+	if item.Status != StatusSuccess {
+		t.Fatalf("auto 未成功：%+v", item)
+	}
+	if int(item.OutputBytes) != minSize {
+		t.Errorf("auto 输出体积 = %d，期望三格式最小值 %d（%v）", item.OutputBytes, minSize, sizes)
+	}
+	if !strings.Contains(item.Message, "自动选择") || !strings.Contains(item.Message, "（最优）") {
+		t.Errorf("auto 未回传所选格式：%+v", item)
+	}
+}
+
+// TestProcessBatchAutoSkipsCompliant D-42：auto 无格式偏好，目标体积与尺寸盒
+// 已满足即跳过——源文件已达标时产出新文件反而更大。
+func TestProcessBatchAutoSkipsCompliant(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "small.png")
+	if err := os.WriteFile(src, batchTestPNG(t, 100, 50), 0o644); err != nil {
+		t.Fatalf("写入测试文件失败: %v", err)
+	}
+	svc := &Service{}
+	result, err := svc.ProcessBatch(
+		BatchRequest{
+			Items: batchItems(src),
+			Rules: BatchRules{OutputFormat: imageproc.OutputAuto, TargetBytes: 1024 * 1024},
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("ProcessBatch 失败: %v", err)
+	}
+	item := result.Items[0]
+	if item.Status != StatusSkipped || item.Message != "已达标" || item.OutputPath != "" {
+		t.Fatalf("auto 应按体积达标跳过：%+v", item)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "small-out.png")); !os.IsNotExist(err) {
+		t.Errorf("跳过项不应产出文件")
+	}
+}
+
+// batchTestSource 读回测试图片的字节（auto 基准转换用）。
+func batchTestSource(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("读取测试图片失败: %v", err)
+	}
+	return data
+}
+
 // batchItems 把绝对路径列表装进批次请求（RelPath 为空：source / custom_flat 模式用不到）。
 func batchItems(paths ...string) []BatchItem {
 	items := make([]BatchItem, len(paths))

@@ -9,6 +9,8 @@ export const OutputFormat = {
   JPEG: 'jpeg',
   PNG: 'png',
   WebP: 'webp',
+  /** 自动（最小体积）：逐项从 JPEG/WebP/PNG 里选输出体积最小者（US-49）。 */
+  Auto: 'auto',
 } as const
 
 /** 输出格式取值类型。 */
