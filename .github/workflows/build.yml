@@ -39,9 +39,10 @@ jobs:
   # Linux .deb 单独成 job（见下方 linux-deb）：
   #   - 麒麟 V10 SP1 是 glibc 2.31 + 仅 WebKitGTK 4.0-37，与 Ubuntu 20.04 一致；
   #   - 因此固定 container: ubuntu:20.04，而不是跟随 runner 镜像漂移；
-#   - VM 标签同样钉死 ubuntu-24.04：2026-10-19 起 ubuntu-latest 舰队逐步切 Ubuntu 26，
-#     混编期间「新宿主 + 20.04 容器」组合出现过 dpkg-deb 校验误红（同刻同配方的
-#     release 腿全绿），不跟着漂移标签走；
+#   - VM 标签同样钉死 ubuntu-24.04（ubuntu-latest 正切 Ubuntu 26，不跟漂移标签走）；
+#     注意容器 job 的 run 步骤要用 bash 专属语法（如 pipefail）必须显式
+#     shell: bash——2026-10-24 runner 更新后容器默认 shell 落到 sh(dash)，
+#     缺声明的校验步骤死于 dash 不认 pipefail（exit 2），release 腿因显式声明而全绿；
   #   - 产物 .deb 作为 artifact 上传，供真机安装冒烟。
   #
   # 桌面编译矩阵（只编译，不启动 GUI）只含 macOS/Windows。
@@ -92,6 +93,7 @@ jobs:
 
       # 元数据断言：架构/包名/版本任一不符即红（package-deb.sh 只写不校验，这里补上）
       - name: 校验 .deb 元数据
+        shell: bash
         run: |
           set -euo pipefail
           APP="$(node -p "require('./wails.json').outputfilename")"
@@ -137,6 +139,7 @@ jobs:
 
       # 元数据断言：错架构/错版本的包发出去就是「装上跑不起来」（与 amd64 腿同款）
       - name: 校验 .deb 元数据
+        shell: bash
         run: |
           set -euo pipefail
           APP="$(node -p "require('./wails.json').outputfilename")"
