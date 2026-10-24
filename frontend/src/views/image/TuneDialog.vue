@@ -81,6 +81,44 @@
               </div>
             </div>
             <p v-else class="tune__hint">修改规则后自动试算；体积与质量为真实编码结果。</p>
+
+            <!-- US-50 三格式竞速：同一张图按当前规则分别跑 JPEG/WebP/PNG，最小行高亮，点选采用。 -->
+            <button
+              class="btn btn--race"
+              type="button"
+              :disabled="!!busyHint || raceBusy"
+              @click="runRace"
+            >
+              {{ raceBusy ? '竞速中…' : '三格式竞速' }}
+            </button>
+            <table v-if="raceRows.length > 0" class="tune__race">
+              <thead>
+                <tr><th>格式</th><th>体积</th><th>质量</th><th>尺寸</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="row in raceRows"
+                  :key="row.format"
+                  :class="{ 'tune__race-row--best': row.isBest }"
+                  :title="row.note"
+                >
+                  <td>{{ row.label }}{{ row.isBest ? ' ✓' : '' }}</td>
+                  <td>{{ row.bytes > 0 ? formatBytes(row.bytes) : '—' }}</td>
+                  <td>{{ row.quality > 0 ? row.quality : '—' }}</td>
+                  <td>{{ row.dims }}</td>
+                  <td>
+                    <button
+                      class="tune__adopt"
+                      type="button"
+                      :disabled="!row.adoptable"
+                      @click="adoptRaceFormat(row.format)"
+                    >
+                      采用
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- 右栏：滑块对比 + 预览级放大（D-40）。底层源图，上层当前规则输出，分割线拖动对比。 -->
@@ -411,6 +449,88 @@ function applyToAll() {
   emit('close')
 }
 
+// ---- 三格式竞速（US-50）：三次试算并行；失败格式行显示原因，成功行按体积高亮最小 ----
+interface RaceRow {
+  format: OutputFormatValue
+  label: string
+  bytes: number
+  quality: number
+  dims: string
+  note: string
+  adoptable: boolean
+  isBest: boolean
+}
+
+const RACE_FORMATS: { value: OutputFormatValue; label: string }[] = [
+  { value: OutputFormat.JPEG, label: 'JPEG' },
+  { value: OutputFormat.WebP, label: 'WebP' },
+  { value: OutputFormat.PNG, label: 'PNG' },
+]
+
+const raceBusy = ref(false)
+const raceRows = ref<RaceRow[]>([])
+
+async function runRace() {
+  if (raceBusy.value || busyHint.value || !props.item) return
+  raceBusy.value = true
+  raceRows.value = []
+  try {
+    const settled = await Promise.all(
+      RACE_FORMATS.map(async ({ value, label }) => {
+        try {
+          const result = await invoke(
+            () =>
+              PreviewConvert(
+                props.item!.path,
+                new service.BatchRules({ ...localRules.value, output_format: value }),
+              ),
+            'PreviewConvert',
+          )
+          return { value, label, result }
+        } catch {
+          // 单格式试算的传输级失败不拖垮整表：该行以失败态呈现。
+          return { value, label, result: null }
+        }
+      }),
+    )
+    const okBytes = settled
+      .filter((entry) => entry.result?.status === 'success')
+      .map((entry) => entry.result!.output_bytes)
+    const minBytes = okBytes.length > 0 ? Math.min(...okBytes) : -1
+    raceRows.value = settled.map(({ value, label, result }) => {
+      if (result?.status === 'success') {
+        return {
+          format: value,
+          label,
+          bytes: result.output_bytes,
+          quality: result.quality,
+          dims: `${result.width} × ${result.height}`,
+          note: result.message || '达标',
+          adoptable: true,
+          isBest: result.output_bytes === minBytes,
+        }
+      }
+      return {
+        format: value,
+        label,
+        bytes: 0,
+        quality: 0,
+        dims: '—',
+        note: result?.message ?? '试算失败',
+        adoptable: false,
+        isBest: false,
+      }
+    })
+  } finally {
+    raceBusy.value = false
+  }
+}
+
+// 采用某行格式：改本地格式即触发试算 watch，「体积最小」的结论交给新一轮试算复核。
+function adoptRaceFormat(next: OutputFormatValue) {
+  format.value = next
+}
+
 function onFormat(event: Event) {
   format.value = (event.target as HTMLSelectElement).value as OutputFormatValue
 }
@@ -707,6 +827,57 @@ function onTargetUnit(event: Event) {
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--border-subtle);
+}
+
+.btn--race {
+  width: 100%;
+}
+
+.tune__race {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.tune__race th,
+.tune__race td {
+  padding: var(--space-1) var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.tune__race th {
+  color: var(--text-3);
+  font-weight: normal;
+}
+
+.tune__race-row--best td {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+}
+
+.tune__adopt {
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.tune__adopt:hover:not(:disabled) {
+  border-color: var(--color-primary-border);
+  color: var(--color-primary);
+}
+
+.tune__adopt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .tune__spacer {
