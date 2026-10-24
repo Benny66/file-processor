@@ -1,13 +1,19 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
-// 路由骨架：图片处理工作台 + 设置。
+// 路由骨架：图片处理工作台 + 历史记录 + 设置。
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'image',
     component: () => import('../views/image/ImageWorkbench.vue'),
     meta: { title: '图片处理' },
+  },
+  {
+    path: '/history',
+    name: 'history',
+    component: () => import('../views/history/HistoryList.vue'),
+    meta: { title: '历史记录' },
   },
   {
     path: '/settings',

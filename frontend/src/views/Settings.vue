@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAppStore } from '../stores/app'
-import { ExportDatabase, GetAppInfo, GetDataDir, OpenDataDir, SelectSaveFile } from '../../wailsjs/go/main/App'
+import { ExportDatabase, GetAppInfo, GetDataDir, HistoryUsage, ClearHistory, Confirm, OpenDataDir, SelectSaveFile } from '../../wailsjs/go/main/App'
 import { invoke, type AppError } from '../lib/invoke'
 import { logInfo } from '../lib/log'
 
@@ -21,6 +21,46 @@ type AppInfo = Awaited<ReturnType<typeof GetAppInfo>>
 const info = ref<AppInfo | null>(null)
 const actionError = ref<AppError | null>(null)
 const exportHint = ref('')
+const historyUsage = ref('')
+const historyBusy = ref(false)
+
+// 历史占用与清空（US-64）：进页面读一次占用；清空经确认后删光记录与暂存图片。
+async function loadHistoryUsage() {
+  try {
+    const bytes = await invoke(() => HistoryUsage(), 'HistoryUsage')
+    historyUsage.value = bytes > 0 ? formatHistoryBytes(bytes) : '0 B'
+  } catch {
+    historyUsage.value = '—'
+  }
+}
+
+function formatHistoryBytes(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit++
+  }
+  return `${value >= 100 ? Math.round(value) : Math.round(value * 10) / 10} ${units[unit]}`
+}
+
+async function clearHistory() {
+  if (historyBusy.value) return
+  actionError.value = null
+  try {
+    const ok = await invoke(() => Confirm('清空历史记录', '所有历史记录和没保存的处理图片都会删掉，找不回来。确定清空吗？'), 'Confirm')
+    if (!ok) return
+    historyBusy.value = true
+    await invoke(() => ClearHistory(), 'ClearHistory')
+    logInfo('历史记录已清空')
+    await loadHistoryUsage()
+  } catch (e) {
+    actionError.value = e as AppError
+  } finally {
+    historyBusy.value = false
+  }
+}
 
 /** 默认导出文件名：带日期，避免用户多次导出互相覆盖。 */
 function defaultBackupName(): string {
@@ -57,6 +97,7 @@ async function openDataDir() {
 
 // 双保险：AppInfo 已含数据目录，若它整条拿不到（极端情况），退回单独查。
 onMounted(async () => {
+  void loadHistoryUsage()
   try {
     info.value = await invoke(() => GetAppInfo())
   } catch (e) {
@@ -115,6 +156,14 @@ onMounted(async () => {
     <div class="setting">
       <span class="setting__label">日志文件</span>
       <span class="setting__path" :title="info?.log_file">{{ info?.log_file || '—' }}</span>
+    </div>
+
+    <div class="setting">
+      <span class="setting__label">历史记录</span>
+      <span class="setting__path">已处理图片占 {{ historyUsage || '…' }}</span>
+      <button class="setting__btn" :disabled="historyBusy" @click="clearHistory">
+        {{ historyBusy ? '正在清空…' : '清空历史记录…' }}
+      </button>
     </div>
 
     <div class="setting">

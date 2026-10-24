@@ -7,9 +7,10 @@ import { useAppStore } from '../stores/app'
 const store = useAppStore()
 const route = useRoute()
 
-// 侧栏菜单项；图片处理为默认工作台，设置保留基座能力。
+// 侧栏菜单项；图片处理为默认工作台，历史记录看过去的处理，设置保留基座能力。
 const menuItems = [
   { path: '/', label: '图片处理', icon: '◈' },
+  { path: '/history', label: '历史记录', icon: '◷' },
   { path: '/settings', label: '设置', icon: '⚙' },
   // gen:menu
 ]
