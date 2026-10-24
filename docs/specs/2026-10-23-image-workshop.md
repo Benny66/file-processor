@@ -276,7 +276,7 @@ type BatchResult struct {
 - 显示名称为“图片工坊”，可执行文件/英文标识为 `ImageWorkshop`。
 - 应用数据目录、日志名、单实例锁均使用 ImageWorkshop 标识，不再使用 `file-processor`。
 - 不迁移旧脚手架的数据；首次启动创建新目录。
-- macOS bundle id 使用占位值开发，发布前必须替换为真实公司域名。
+- macOS bundle id 保持占位值 `com.example.imageworkshop`（2026-10 修订：个人与朋友分发，不办证书不做公证，占位值无实际影响；若未来正式分发再统一收口，见 D-32）。
 
 **US-36 本地与离线性**
 - 运行时不发起网络请求，不上传图片，不采集遥测。
@@ -330,7 +330,7 @@ type BatchResult struct {
 | D-29 | 复用既有错误/事件/分页/日志契约；事件域为 `image` | 遵守仓库单一真相与镜像护栏。 |
 | D-30 | Kylin 关闭不得导致无法恢复；托盘未验证可用时关闭即退出 | 托盘失败时不能“关闭即失联”。 |
 | D-31 | 新依赖必须登记 `deps.yaml` 并附理由 | 仓库依赖登记制护栏。 |
-| D-32 | 首个发布版本 0.1.0；bundle id 发布前替换 | 避免 `com.example` 进入正式包。 |
+| D-32 | 首个发布版本 0.1.0；bundle id 保持占位（2026-10 修订：个人分发不做签名公证，`com.example` 无实际影响；正式分发立项时再收口） | 没有公司域名可换；避免「发布前必须替换」的悬空承诺。 |
 | D-33 | 构建基线升到 Go 1.26.x | 002 spike：Go 1.25 冷编译 `gen2brain/webp` 516s/2.245GB 时被 kill（原因未确认）；Go 1.26.2 冷编译 34.9s/898MB。003 落实 go.mod/CI/README。 |
 
 ## 5. 测试决策
@@ -408,7 +408,7 @@ type BatchResult struct {
 - 云上传、账号、分享链接、遥测。
 - 视频、PDF、RAW、PSD 等其它文件类型。
 - Linux AppImage/Flatpak/Snap、Windows ARM、Linux ARM。
-- macOS 公证、Windows 代码签名、自动更新。
+- macOS 公证、Windows 代码签名（2026-10 决策：个人分发不办证书，首次打开靠安装指南放行，见 `docs/specs/2026-10-24-p0-release-identity-plan.md`）、自动更新。
 - 除中文外的界面本地化。
 
 ## 7. 补充说明
@@ -450,8 +450,8 @@ type BatchResult struct {
 - 构建基线：Go 1.26.x；`go.mod`、CI `setup-go`、README 三处一致。
 - 单实例锁 ID 改为 ImageWorkshop 专属。
 - 数据目录、日志、数据库、配置均随 appName 变化；旧 `file-processor` 数据不迁移。
-- macOS bundle id 暂用占位，发布前替换；版本首版 0.1.0。
-- Kylin `.deb` 包名使用小写 `image-workshop`，显示名用中文。
+- macOS bundle id 保持占位（个人分发，见 D-32 修订）；版本首版 0.1.0。
+- Kylin `.deb` 包名使用小写 `imageworkshop`（与 `package-deb.sh` 实际一致），显示名用中文。
 
 ### 7.5 已确认的默认假设
 
