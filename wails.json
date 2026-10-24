@@ -4,7 +4,7 @@
   "outputfilename": "ImageWorkshop",
   "info": {
     "productName": "图片工坊",
-    "productVersion": "0.1.0",
+    "productVersion": "0.2.0",
     "comments": "批量图片格式转换、目标体积压缩与尺寸调整"
   },
   "frontend:install": "npm install",
