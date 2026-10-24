@@ -42,6 +42,16 @@
     >
       对比
     </button>
+    <!-- US-44：失败/已取消行可单独重跑；批次运行中禁用（US-06 只禁编辑队列，重跑是新批次）。 -->
+    <button
+      v-if="canRetry"
+      class="row__compare row__retry"
+      type="button"
+      :disabled="busy"
+      @click="emit('retry', item.path)"
+    >
+      重跑
+    </button>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
     </button>
@@ -50,7 +60,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ItemStatus, type ItemStatusValue } from '../../lib/image'
+import { ItemStatus, isRetryableStatus, type ItemStatusValue } from '../../lib/image'
 import { formatBytes } from './format'
 import type { QueueItem } from './types'
 
@@ -59,6 +69,7 @@ const emit = defineEmits<{
   (e: 'inspect', path: string): void
   (e: 'remove', path: string): void
   (e: 'compare', path: string): void
+  (e: 'retry', path: string): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -149,6 +160,8 @@ const canCompare = computed(
   () =>
     props.item.result?.status === ItemStatus.Success && !!props.item.result.output_path,
 )
+
+const canRetry = computed(() => isRetryableStatus(props.item.result?.status ?? ''))
 
 function formatLabel(format: string): string {
   return format.toUpperCase()
@@ -392,6 +405,10 @@ onUnmounted(() => {
 .row__compare:focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+.row__retry {
+  color: var(--color-warning);
 }
 
 .row__remove {

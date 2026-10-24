@@ -203,6 +203,15 @@
     </div>
     <div v-if="batchSummary" class="notice" role="status">
       <span class="notice__text">{{ batchSummary }}</span>
+      <!-- US-43：批次结束后一键重跑全部失败/已取消项；成功/跳过结果不动。 -->
+      <button
+        v-if="retryCount > 0 && !busy"
+        class="notice__retry"
+        type="button"
+        @click="retryUnfinished"
+      >
+        重跑失败/未完成项（{{ retryCount }}）
+      </button>
       <button class="notice__close" type="button" aria-label="关闭处理结果" @click="dismissSummary">
         ×
       </button>
@@ -224,6 +233,7 @@
         @inspect="requestInspect"
         @remove="removeItem"
         @compare="openCompare"
+        @retry="retryOne"
       />
     </ul>
 
@@ -261,7 +271,7 @@ import { useEvent } from '../../composables/useEvent'
 import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, ItemStatus, OutputFormat, OutputMode, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
+import { BoxDimension, ItemStatus, OutputFormat, OutputMode, isRetryableStatus, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
 import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
@@ -705,25 +715,60 @@ async function importPaths(paths: string[]) {
   }
 }
 
-function summaryText(result: BatchResult): string {
-  const parts = [`成功 ${result.success}`, `失败 ${result.failed}`]
-  if (result.skipped > 0) parts.push(`跳过 ${result.skipped}`)
-  if (result.canceled > 0) parts.push(`取消 ${result.canceled}`)
-  if (result.extreme_degraded > 0) parts.push(`极端降级 ${result.extreme_degraded}`)
+// US-43 的重跑集合：批次结束后仍处于「失败/已取消」的项。
+const retryCount = computed(
+  () => items.value.filter((item) => isRetryableStatus(item.result?.status ?? '')).length,
+)
+
+// 汇总从 items 派生而非只信最后一次 BatchResult（US-43）：
+// 重跑只合并回被重跑的项，合并后 items 才是唯一真相。
+function refreshBatchSummary() {
+  const results = items.value.map((item) => item.result).filter((r): r is ItemResult => r !== null)
+  if (results.length === 0) {
+    batchSummary.value = null
+    return
+  }
+  let success = 0
+  let failed = 0
+  let skipped = 0
+  let canceled = 0
+  let extreme = 0
+  let saved = 0
+  let sourceTotal = 0
+  for (const item of results) {
+    switch (item.status) {
+      case ItemStatus.Success:
+        success++
+        sourceTotal += item.source_bytes || 0
+        saved += (item.source_bytes || 0) - (item.output_bytes || 0)
+        if (item.extreme_degraded) extreme++
+        break
+      case ItemStatus.Failed:
+        failed++
+        break
+      case ItemStatus.Skipped:
+        skipped++
+        break
+      case ItemStatus.Canceled:
+        canceled++
+        break
+    }
+  }
+  const parts = [`成功 ${success}`, `失败 ${failed}`]
+  if (skipped > 0) parts.push(`跳过 ${skipped}`)
+  if (canceled > 0) parts.push(`取消 ${canceled}`)
+  if (extreme > 0) parts.push(`极端降级 ${extreme}`)
   let text = `处理完成：${parts.join('、')}`
-  // US-27：批次总计给出字节与百分比；输出更大时说「累计增加」，百分比同样带出。
-  if (result.saved_bytes !== 0) {
-    const sourceTotal = result.items
-      .filter((item) => item.status === ItemStatus.Success)
-      .reduce((sum, item) => sum + (item.source_bytes || 0), 0)
-    const label = result.saved_bytes > 0 ? '累计节省' : '累计增加'
-    text += `；${label} ${formatBytes(Math.abs(result.saved_bytes))}`
+  // US-27：批次总计给出字节与百分比；输出更大时说「累计增加」。
+  if (saved !== 0) {
+    const label = saved > 0 ? '累计节省' : '累计增加'
+    text += `；${label} ${formatBytes(Math.abs(saved))}`
     if (sourceTotal > 0) {
-      const percent = Math.round((Math.abs(result.saved_bytes) / sourceTotal) * 100)
+      const percent = Math.round((Math.abs(saved) / sourceTotal) * 100)
       if (percent > 0) text += `（${percent}%）`
     }
   }
-  return text
+  batchSummary.value = text
 }
 
 function applyBatchResult(result: BatchResult) {
@@ -731,12 +776,68 @@ function applyBatchResult(result: BatchResult) {
   processed.value = result.items.length
   total.value = result.items.length
   resultsStale.value = false
-  batchSummary.value = summaryText(result)
+  refreshBatchSummary()
   logInfo('批量处理完成', {
     success: result.success,
     failed: result.failed,
     canceled: result.canceled,
   })
+}
+
+// US-43/44：队列内重跑失败与未完成项。Go 侧 ProcessBatch 本就无状态、接受任意
+// 子集，重跑即「以当前规则与输出计划再发一个只含目标项的批次」，返回结果只合并
+// 回这些项。不构成任务历史：清空队列即消失（D-38，对「明确不做」的范围澄清）。
+async function runRetry(targets: QueueItem[]) {
+  if (busy.value || targets.length === 0) return
+  processing.value = true
+  canceling.value = false
+  processed.value = 0
+  total.value = targets.length
+  actionError.value = null
+  for (const item of targets) {
+    item.result = null
+    item.processing = false
+    item.queued = true
+  }
+  try {
+    await flushSettingsSave()
+    const request = new service.BatchRequest({
+      items: targets.map((item) => ({ path: item.path, rel_path: item.rel_path ?? '' })),
+      rules: currentRules.value,
+      output: outputPlan.value,
+    })
+    const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
+    for (const item of result.items) applyItemResult(item)
+    processed.value = total.value
+    refreshBatchSummary()
+    logInfo('重跑完成', {
+      retried: result.items.length,
+      failed: result.failed,
+      canceled: result.canceled,
+    })
+  } catch (e) {
+    actionError.value = e as AppError
+    logError('重跑失败', e)
+  } finally {
+    processing.value = false
+    canceling.value = false
+    for (const item of items.value) {
+      item.queued = false
+      item.processing = false
+    }
+  }
+}
+
+async function retryUnfinished() {
+  const targets = items.value.filter((item) => isRetryableStatus(item.result?.status ?? ''))
+  await runRetry(targets)
+}
+
+async function retryOne(path: string) {
+  if (busy.value) return
+  const target = items.value.find((item) => item.path === path)
+  if (!target) return
+  await runRetry([target])
 }
 
 async function startBatch() {
@@ -871,6 +972,7 @@ function removeItem(path: string) {
   if (busy.value) return
   items.value = items.value.filter((item) => item.path !== path)
   markResultsStale()
+  refreshBatchSummary()
 }
 
 function dismissNote() {
@@ -1206,6 +1308,31 @@ onUnmounted(() => {
 
 .notice--stale {
   border-color: var(--color-warning);
+}
+
+.notice__retry {
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--color-warning);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.notice__retry:hover:not(:disabled) {
+  border-color: var(--color-warning);
+  color: var(--text-1);
+}
+
+.notice__retry:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .notice__text {
