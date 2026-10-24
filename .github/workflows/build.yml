@@ -8,15 +8,15 @@ on:
 jobs:
   # 静态检查：护栏 + lint（不启动 GUI）
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -39,6 +39,9 @@ jobs:
   # Linux .deb 单独成 job（见下方 linux-deb）：
   #   - 麒麟 V10 SP1 是 glibc 2.31 + 仅 WebKitGTK 4.0-37，与 Ubuntu 20.04 一致；
   #   - 因此固定 container: ubuntu:20.04，而不是跟随 runner 镜像漂移；
+#   - VM 标签同样钉死 ubuntu-24.04：2026-10-19 起 ubuntu-latest 舰队逐步切 Ubuntu 26，
+#     混编期间「新宿主 + 20.04 容器」组合出现过 dpkg-deb 校验误红（同刻同配方的
+#     release 腿全绿），不跟着漂移标签走；
   #   - 产物 .deb 作为 artifact 上传，供真机安装冒烟。
   #
   # 桌面编译矩阵（只编译，不启动 GUI）只含 macOS/Windows。
@@ -46,7 +49,7 @@ jobs:
   # Kylin / Linux .deb 构建（glibc 2.31 + WebKitGTK 2.28.1）
   linux-deb:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: ubuntu:20.04
     steps:
       # ubuntu:20.04 最小镜像没有 git，checkout 之前必须先装
@@ -55,7 +58,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux build deps
         run: |
@@ -70,11 +73,11 @@ jobs:
             libjavascriptcoregtk-4.0-18=2.28.1-1 \
             gir1.2-javascriptcoregtk-4.0=2.28.1-1
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -95,6 +98,7 @@ jobs:
           V="$(node -p "require('./wails.json').info.productVersion")"
           DEB="build/bin/${APP}_${V}_amd64.deb"
           [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --version | head -1  # 环境漂移排查线（2026-10 ubuntu-latest→26 舰队混编时容器腿误红过）
           dpkg-deb --info "$DEB" > /tmp/deb-info.txt
           grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
           grep -E '^ Architecture: amd64$' /tmp/deb-info.txt
@@ -112,11 +116,11 @@ jobs:
   # 只产 artifact、不接 Release——arm64 未经真机验收前不宣称可发布（D-45）。
   linux-deb-arm64:
     needs: check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -134,6 +138,7 @@ jobs:
           V="$(node -p "require('./wails.json').info.productVersion")"
           DEB="build/bin/${APP}_${V}_arm64.deb"
           [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --version | head -1  # 环境漂移排查线（2026-10 ubuntu-latest→26 舰队混编时容器腿误红过）
           dpkg-deb --info "$DEB" > /tmp/deb-info.txt
           grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
           grep -E '^ Architecture: arm64$' /tmp/deb-info.txt
@@ -152,13 +157,13 @@ jobs:
         os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 

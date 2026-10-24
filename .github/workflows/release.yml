@@ -11,6 +11,7 @@ name: Release
 #   1. verify        —— 不从不绿的提交发版（tag 可以打在任意提交上）
 #   2. package       —— macOS / Windows matrix 并行打包，产物作为 workflow artifact 传递
 #   3. package-linux —— Linux .deb 腿：钉死 ubuntu:20.04 容器（麒麟 glibc 2.31 +
+#      加 VM 钉 ubuntu-24.04——ubuntu-latest 正切 Ubuntu 26，混编期宿主代次不可控；
 #                       WebKitGTK 2.28.1，与 build.yml 的 linux-deb 同环境）。
 #                       不并入 package matrix——matrix 条目跑在 VM 上，本腿需要 container
 #   4. release       —— 三腿都成功后，单点创建 Release 并附加全部产物
@@ -25,15 +26,15 @@ permissions:
 jobs:
   # 发版前先跑一遍静态检查：tag 可能被打在没走过 CI 的提交上
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -62,13 +63,13 @@ jobs:
             target: windows
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -158,7 +159,7 @@ jobs:
   # 固定 ubuntu:20.04 容器不随 runner 漂移），因此两边依赖版本必须同步改。
   package-linux:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container: ubuntu:20.04
     steps:
       # ubuntu:20.04 最小镜像没有 git，checkout 之前必须先装
@@ -167,7 +168,7 @@ jobs:
           apt-get update
           DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends git ca-certificates
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Linux build deps
         run: |
@@ -182,11 +183,11 @@ jobs:
             libjavascriptcoregtk-4.0-18=2.28.1-1 \
             gir1.2-javascriptcoregtk-4.0=2.28.1-1
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -228,6 +229,7 @@ jobs:
           V="${GITHUB_REF_NAME#v}"
           DEB="build/bin/${APP}_${V}_amd64.deb"
           [ -f "$DEB" ] || { echo "未找到 $DEB" >&2; exit 1; }
+          dpkg-deb --version | head -1  # 环境漂移排查线（2026-10 ubuntu-latest→26 舰队混编时容器腿误红过）
           dpkg-deb --info "$DEB" > /tmp/deb-info.txt
           grep -E '^ Package: imageworkshop$' /tmp/deb-info.txt
           grep -E '^ Architecture: amd64$' /tmp/deb-info.txt
@@ -256,11 +258,11 @@ jobs:
 
   release:
     needs: [verify, package, package-linux]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # gh 需要仓库上下文（推断 owner/repo）——没有 checkout 会直接报
       # 「not a git repository」。这一步不是为了取文件，是为了给 gh 上下文。
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 母版不产安装包，此处没有 artifact 可下载——不是错误，Release 仍会带源码归档
       - uses: actions/download-artifact@v4
