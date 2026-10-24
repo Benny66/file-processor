@@ -18,7 +18,7 @@ export function GetAppInfo():Promise<appinfo.Info>;
 
 export function GetDataDir():Promise<string>;
 
-export function GetImageSettings():Promise<service.BatchRules>;
+export function GetImageSettings():Promise<service.ImageSettings>;
 
 export function GetLaunchArgs():Promise<Array<string>>;
 
@@ -34,7 +34,7 @@ export function ProcessBatch(arg1:service.BatchRequest):Promise<service.BatchRes
 
 export function RenderPreview(arg1:string,arg2:number):Promise<imageproc.Preview>;
 
-export function SaveImageSettings(arg1:service.BatchRules):Promise<void>;
+export function SaveImageSettings(arg1:service.ImageSettings):Promise<void>;
 
 export function SavePreset(arg1:model.ImagePreset):Promise<model.ImagePreset>;
 
@@ -54,4 +54,4 @@ export function SupportedFormatHints():Promise<Array<string>>;
 
 export function TrayAvailable():Promise<boolean>;
 
-export function ValidateImageRules(arg1:service.BatchRules):Promise<string>;
+export function ValidateImageRules(arg1:service.BatchRules,arg2:service.OutputPlan):Promise<string>;

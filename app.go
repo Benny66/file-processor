@@ -185,10 +185,10 @@ func (a *App) RenderPreview(path string, maxEdge int) (imageproc.Preview, error)
 	return a.svc.RenderPreview(path, maxEdge)
 }
 
-// ValidateImageRules 在发起批次之前预检规则，返回可直接展示的提示文案；合法时返回空串。
+// ValidateImageRules 在发起批次之前预检规则与输出目的地，返回可直接展示的提示文案；合法时返回空串。
 // 判定与文案的单一真相都在 service，前端不再比较大小、也不再抄一份提示。
-func (a *App) ValidateImageRules(rules service.BatchRules) string {
-	return a.svc.ValidateImageRules(rules)
+func (a *App) ValidateImageRules(rules service.BatchRules, output service.OutputPlan) string {
+	return a.svc.ValidateImageRules(rules, output)
 }
 
 // SupportedFormatHints 返回可导入格式的展示清单（单一真相在 imageproc.supportedFormats）。
@@ -238,14 +238,14 @@ func (a *App) DeletePreset(id uint) error {
 	return a.svc.DeletePreset(id)
 }
 
-// GetImageSettings 返回上次使用的图片处理参数。
-func (a *App) GetImageSettings() (service.BatchRules, error) {
+// GetImageSettings 返回上次使用的图片处理参数（规则 + 输出目的地）。
+func (a *App) GetImageSettings() (service.ImageSettings, error) {
 	return a.svc.GetImageSettings()
 }
 
-// SaveImageSettings 持久化上次使用的图片处理参数。
-func (a *App) SaveImageSettings(rules service.BatchRules) error {
-	return a.svc.SaveImageSettings(rules)
+// SaveImageSettings 持久化上次使用的图片处理参数（规则 + 输出目的地）。
+func (a *App) SaveImageSettings(settings service.ImageSettings) error {
+	return a.svc.SaveImageSettings(settings)
 }
 
 // TrayAvailable 告诉前端当前是否能把窗口隐藏到托盘。

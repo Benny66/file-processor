@@ -38,3 +38,16 @@ export const TargetBytes = {
   Min: 1024,
   Max: 1073741824,
 } as const
+
+/** 输出目的地模式。单一真相在 Go 的 internal/service（OutputMode*）。 */
+export const OutputMode = {
+  /** 源文件同目录（默认）。 */
+  Source: 'source',
+  /** 自定义目录，平铺。 */
+  CustomFlat: 'custom_flat',
+  /** 自定义目录，按导入相对路径保留结构。 */
+  CustomTree: 'custom_tree',
+} as const
+
+/** 输出目的地模式取值类型。 */
+export type OutputModeValue = (typeof OutputMode)[keyof typeof OutputMode]

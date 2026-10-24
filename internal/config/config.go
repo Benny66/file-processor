@@ -48,6 +48,12 @@ type Config struct {
 	ImageMaxWidth     int    `json:"image_max_width"`
 	ImageMaxHeight    int    `json:"image_max_height"`
 
+	// 上次使用的输出目的地（US-39~42）。空 Mode 表示“源文件同目录”，
+	// 空 Pattern 由读取方按 “{name}-out” 处理；预设不携带这些值（D-34）。
+	ImageOutputMode      string `json:"image_output_mode"`
+	ImageOutputDirectory string `json:"image_output_directory"`
+	ImageOutputPattern   string `json:"image_output_pattern"`
+
 	// path 是配置文件路径，不序列化（json:"-"）。
 	path string `json:"-"`
 }

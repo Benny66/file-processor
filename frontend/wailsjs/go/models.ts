@@ -158,6 +158,36 @@ export namespace page {
 
 export namespace service {
 	
+	export class BatchItem {
+	    path: string;
+	    rel_path: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.rel_path = source["rel_path"];
+	    }
+	}
+	export class OutputPlan {
+	    mode: string;
+	    directory: string;
+	    pattern: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new OutputPlan(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mode = source["mode"];
+	        this.directory = source["directory"];
+	        this.pattern = source["pattern"];
+	    }
+	}
 	export class BatchRules {
 	    output_format: string;
 	    target_bytes: number;
@@ -177,8 +207,9 @@ export namespace service {
 	    }
 	}
 	export class BatchRequest {
-	    paths: string[];
+	    items: BatchItem[];
 	    rules: BatchRules;
+	    output: OutputPlan;
 	
 	    static createFrom(source: any = {}) {
 	        return new BatchRequest(source);
@@ -186,8 +217,9 @@ export namespace service {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.paths = source["paths"];
+	        this.items = this.convertValues(source["items"], BatchItem);
 	        this.rules = this.convertValues(source["rules"], BatchRules);
+	        this.output = this.convertValues(source["output"], OutputPlan);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -285,6 +317,39 @@ export namespace service {
 		}
 	}
 	
+	export class ImageSettings {
+	    rules: BatchRules;
+	    output: OutputPlan;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImageSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rules = this.convertValues(source["rules"], BatchRules);
+	        this.output = this.convertValues(source["output"], OutputPlan);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	
 	export class ScanRejection {
 	    path: string;
@@ -304,6 +369,7 @@ export namespace service {
 	    path: string;
 	    name: string;
 	    size: number;
+	    rel_path: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ScannedFile(source);
@@ -314,6 +380,7 @@ export namespace service {
 	        this.path = source["path"];
 	        this.name = source["name"];
 	        this.size = source["size"];
+	        this.rel_path = source["rel_path"];
 	    }
 	}
 	export class ScanResult {

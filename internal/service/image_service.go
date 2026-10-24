@@ -16,6 +16,9 @@ type ScannedFile struct {
 	Path string `json:"path"`
 	Name string `json:"name"`
 	Size int64  `json:"size"`
+	// RelPath 是导入根下的相对路径（含文件名）：目录导入时相对该目录，
+	// 直接选文件时即文件名。输出保留结构模式（US-40）以它重建目录层级。
+	RelPath string `json:"rel_path"`
 }
 
 // ScanRejection 是扫描阶段被跳过的路径及原因。
@@ -81,7 +84,12 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 			continue
 		}
 		seen[abs] = struct{}{}
-		result.Files = append(result.Files, ScannedFile{Path: abs, Name: info.Name(), Size: info.Size()})
+		result.Files = append(result.Files, ScannedFile{
+			Path:    abs,
+			Name:    info.Name(),
+			Size:    info.Size(),
+			RelPath: info.Name(),
+		})
 	}
 
 	sort.Slice(result.Files, func(i, j int) bool {
@@ -186,7 +194,17 @@ func scanImageDirectory(root string, skipped, seen map[string]struct{}, result *
 			return nil
 		}
 		seen[path] = struct{}{}
-		result.Files = append(result.Files, ScannedFile{Path: path, Name: d.Name(), Size: info.Size()})
+		// 相对路径以导入根为基准：custom_tree 模式靠它把子目录层级原样搬到输出目录。
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			rel = d.Name()
+		}
+		result.Files = append(result.Files, ScannedFile{
+			Path:    path,
+			Name:    d.Name(),
+			Size:    info.Size(),
+			RelPath: rel,
+		})
 		return nil
 	}); err != nil {
 		result.Rejected = append(result.Rejected, ScanRejection{Path: root, Reason: "扫描目录失败"})

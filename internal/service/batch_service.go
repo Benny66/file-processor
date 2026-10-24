@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -29,6 +31,19 @@ const (
 	TargetBytesMax int64 = 1073741824
 )
 
+// 输出目的地模式（单一真相；前端镜像在 frontend/src/lib/image.ts 的 OutputMode）。
+const (
+	// OutputModeSource 写回源文件同目录（默认，行为与历史版本一致）。
+	OutputModeSource = "source"
+	// OutputModeCustomFlat 写入用户指定目录，全部平铺。
+	OutputModeCustomFlat = "custom_flat"
+	// OutputModeCustomTree 写入用户指定目录，并按导入时的相对路径保留文件夹结构。
+	OutputModeCustomTree = "custom_tree"
+)
+
+// OutputPatternDefault 是命名模板的缺省值（即历史行为的 <原名>-out）。
+const OutputPatternDefault = "{name}-out"
+
 // BatchRules 是一批图片的处理规则；0 表示关闭该项。
 type BatchRules struct {
 	OutputFormat string `json:"output_format"`
@@ -37,11 +52,37 @@ type BatchRules struct {
 	MaxHeight    int    `json:"max_height"`
 }
 
-// validateBatchStart 是「能不能开始一个批次」的完整判定（US-11）：范围合法 + 至少一条有效规则。
+// OutputPlan 描述结果写到哪里、叫什么名字（US-39~41）。
+// 它是「环境粘性设置」而非规则：随上次设置持久化，但【不进预设】——
+// 输出目录是机器相关的事实，进预设会让「应用预设」意外改写落盘位置（D-34）。
+type OutputPlan struct {
+	Mode      string `json:"mode"`      // OutputMode* 之一；空串按 source 处理
+	Directory string `json:"directory"` // custom_* 模式必填，绝对路径
+	Pattern   string `json:"pattern"`   // 词干命名模板；空串按 "{name}-out" 处理
+}
+
+// BatchItem 是批次里的一张图：绝对路径 + 导入根下的相对路径。
+// RelPath 只为 custom_tree 模式服务（US-40）；source / custom_flat 模式可为空。
+type BatchItem struct {
+	Path    string `json:"path"`
+	RelPath string `json:"rel_path"`
+}
+
+// ImageSettings 是「上次设置」的整体：处理规则 + 输出目的地（US-42）。
+type ImageSettings struct {
+	Rules  BatchRules `json:"rules"`
+	Output OutputPlan `json:"output"`
+}
+
+// validateBatchStart 是「能不能开始一个批次」的完整判定（US-11）：
+// 规则范围合法 + 输出目的地合法 + 至少一条有效规则。
 //
 // 「至少一条」只约束开跑，不约束保存预设/上次设置——用户可能先把空规则存下来。
-func validateBatchStart(rules BatchRules) error {
+func validateBatchStart(rules BatchRules, output OutputPlan) error {
 	if err := validateBatchRules(rules); err != nil {
+		return err
+	}
+	if err := validateOutputPlan(output); err != nil {
 		return err
 	}
 	if rules.OutputFormat == imageproc.OutputKeep && rules.TargetBytes == 0 && rules.MaxWidth == 0 {
@@ -57,11 +98,76 @@ func validateBatchStart(rules BatchRules) error {
 // 自己比较 targetValid/sizeBoxValid 并抄了一份中文提示，与 Go 的 validateBatchRules
 // 是【同一条规则的两个实现】，而且已经漂移——Go 有「宽高需同时设置」，前端没有，
 // 用户看到的原因与真实被拒的原因不一致。铁律 1：镜像只许复制常量与类型，不许复制逻辑。
-func (s *Service) ValidateImageRules(rules BatchRules) string {
-	if err := validateBatchStart(rules); err != nil {
+func (s *Service) ValidateImageRules(rules BatchRules, output OutputPlan) string {
+	if err := validateBatchStart(rules, output); err != nil {
 		return err.Error()
 	}
 	return ""
+}
+
+// validateOutputPlan 校验输出目的地；批次、预检与上次设置共用同一套规则。
+// 自定义目录允许暂不存在（落位前统一 MkdirAll），但必须是绝对路径。
+func validateOutputPlan(plan OutputPlan) error {
+	switch plan.Mode {
+	case "", OutputModeSource, OutputModeCustomFlat, OutputModeCustomTree:
+	default:
+		return apperr.Validation("输出模式取值非法")
+	}
+	if plan.Mode == OutputModeCustomFlat || plan.Mode == OutputModeCustomTree {
+		if strings.TrimSpace(plan.Directory) == "" {
+			return apperr.Validation("自定义输出目录不能为空")
+		}
+		if !filepath.IsAbs(filepath.Clean(plan.Directory)) {
+			return apperr.Validation("输出目录必须是绝对路径")
+		}
+	}
+	pattern := plan.Pattern
+	if pattern == "" {
+		pattern = OutputPatternDefault
+	}
+	if len(pattern) > 64 {
+		return apperr.Validation("命名模板最长 64 个字符")
+	}
+	if !strings.Contains(pattern, "{name}") && !strings.Contains(pattern, "{n}") {
+		return apperr.Validation("命名模板需包含 {name} 或 {n}")
+	}
+	if strings.ContainsAny(pattern, `/\`) || strings.Contains(pattern, "..") {
+		return apperr.Validation("命名模板不能包含路径分隔符或 ..")
+	}
+	return nil
+}
+
+// renderOutputStem 把命名模板渲染成输出词干；未知占位符原样保留（如 "{ext}" 视作字面文本）。
+func renderOutputStem(pattern, stem string, index int) string {
+	if pattern == "" {
+		pattern = OutputPatternDefault
+	}
+	out := strings.ReplaceAll(pattern, "{name}", stem)
+	return strings.ReplaceAll(out, "{n}", strconv.Itoa(index))
+}
+
+// resolveOutputDir 计算某一项的输出目录。
+// 返回值二表示是否允许目录不存在（custom 模式由调用方 MkdirAll）。
+func resolveOutputDir(item BatchItem, plan OutputPlan) (string, bool, error) {
+	switch plan.Mode {
+	case "", OutputModeSource:
+		return filepath.Dir(item.Path), false, nil
+	case OutputModeCustomFlat:
+		return filepath.Clean(plan.Directory), true, nil
+	case OutputModeCustomTree:
+		rel := filepath.Clean(item.RelPath)
+		if rel == "" || rel == "." {
+			rel = filepath.Base(item.Path)
+		}
+		// RelPath 理论上只来自扫描（不含 ..），但绑定入参不可信：
+		// 这里挡住路径穿越，防止把输出写到指定目录之外。
+		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", false, apperr.Validation("输出相对路径非法")
+		}
+		return filepath.Join(filepath.Clean(plan.Directory), filepath.Dir(rel)), true, nil
+	default:
+		return "", false, apperr.Validation("输出模式取值非法")
+	}
 }
 
 // validateBatchRules 校验规则取值范围；批次、预设与上次设置共用同一套规则。
@@ -84,10 +190,12 @@ func validateBatchRules(rules BatchRules) error {
 	return nil
 }
 
-// BatchRequest 是一次批量处理请求。
+// BatchRequest 是一次批量处理请求。Items 取代了原先的 Paths：保留结构模式
+// 需要每项「导入根下的相对路径」（US-40），只有绝对路径推不出来。
 type BatchRequest struct {
-	Paths []string   `json:"paths"`
-	Rules BatchRules `json:"rules"`
+	Items  []BatchItem `json:"items"`
+	Rules  BatchRules  `json:"rules"`
+	Output OutputPlan  `json:"output"`
 }
 
 // ItemStatus 是单个文件的处理结果状态。
@@ -147,10 +255,10 @@ type BatchProgress struct {
 // ProcessBatch 以最多两个 worker 转换一批图片；取消在当前文件完成后生效。
 // emit 可为 nil；非 nil 时按完成顺序推送进度。
 func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (BatchResult, error) {
-	if len(req.Paths) == 0 {
+	if len(req.Items) == 0 {
 		return BatchResult{}, apperr.Validation("没有可处理的图片")
 	}
-	if err := validateBatchStart(req.Rules); err != nil {
+	if err := validateBatchStart(req.Rules, req.Output); err != nil {
 		return BatchResult{}, err
 	}
 
@@ -171,7 +279,7 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 		s.batchMu.Unlock()
 	}()
 
-	total := len(req.Paths)
+	total := len(req.Items)
 	results := make([]ItemResult, total)
 	jobs := make(chan int, total)
 	for i := 0; i < total; i++ {
@@ -196,16 +304,16 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 				if ctx.Err() != nil {
 					return
 				}
-				path := req.Paths[idx]
+				item := req.Items[idx]
 				// 开工先播报「处理中」——进度事件是唯一的状态来源，前端不自己猜。
 				progressMu.Lock()
 				if emit != nil {
 					emit(BatchProgress{Done: done, Total: total,
-						Started: &ItemResult{Path: path, Status: StatusProcessing}})
+						Started: &ItemResult{Path: item.Path, Status: StatusProcessing}})
 				}
 				progressMu.Unlock()
 
-				res := s.convertOne(path, req.Rules)
+				res := s.convertOne(item, idx+1, req.Rules, req.Output)
 				results[idx] = res
 				progressMu.Lock()
 				done++
@@ -221,7 +329,7 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 
 	for i := range results {
 		if results[i].Status == "" {
-			results[i] = ItemResult{Path: req.Paths[i], Status: StatusCanceled, Message: "已取消"}
+			results[i] = ItemResult{Path: req.Items[i].Path, Status: StatusCanceled, Message: "已取消"}
 		}
 	}
 
@@ -266,15 +374,16 @@ func (s *Service) CancelBatch() {
 // 为什么单独包一层：失败原因此前只回到前端做展示，日志里没有——用户报「有几张坏了」
 // 时无法事后核对。日志只记路径与原因，**不记图片内容**（US-26 明确要求，也避免
 // 把素材写进日志目录）。
-func (s *Service) convertOne(path string, rules BatchRules) ItemResult {
-	res := s.convertOnce(path, rules)
+func (s *Service) convertOne(item BatchItem, index int, rules BatchRules, output OutputPlan) ItemResult {
+	res := s.convertOnce(item, index, rules, output)
 	if res.Status == StatusFailed {
-		slog.Warn("图片处理失败", "path", path, "reason", res.Message)
+		slog.Warn("图片处理失败", "path", item.Path, "reason", res.Message)
 	}
 	return res
 }
 
-func (s *Service) convertOnce(path string, rules BatchRules) ItemResult {
+func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, output OutputPlan) ItemResult {
+	path := item.Path
 	res := ItemResult{Path: path}
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -341,9 +450,20 @@ func (s *Service) convertOnce(path string, rules BatchRules) ItemResult {
 		res.Message = err.Error()
 		return res
 	}
-	dir := filepath.Dir(path)
 	stem := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	finalPath, err := writeConvertedFile(dir, stem, ext, converted.Data)
+	dir, _, err := resolveOutputDir(item, output)
+	if err != nil {
+		res.Status = StatusFailed
+		res.Message = err.Error()
+		return res
+	}
+	// 目录不存在则创建（custom 模式常态；source 模式目录必已存在，MkdirAll 是无害的幂等调用）。
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		res.Status = StatusFailed
+		res.Message = fmt.Sprintf("创建输出目录失败: %v", err)
+		return res
+	}
+	finalPath, err := writeConvertedFile(dir, renderOutputStem(output.Pattern, stem, index), ext, converted.Data)
 	if err != nil {
 		res.Status = StatusFailed
 		res.Message = fmt.Sprintf("写入输出失败: %v", err)
@@ -359,7 +479,11 @@ func (s *Service) convertOnce(path string, rules BatchRules) ItemResult {
 	return res
 }
 
-// writeConvertedFile 先写同目录临时文件，再用硬链接以不覆盖方式落位。
+// linkOutputFile 抽出硬链接调用，测试用它模拟不支持链接的文件系统（网络盘等）。
+var linkOutputFile = os.Link
+
+// writeConvertedFile 先写目标目录下的临时文件，再以不覆盖方式落位。
+// 临时文件与最终位置【同目录】：硬链接落位天然原子；即便走复制回退也不跨目录搬运。
 func writeConvertedFile(dir, stem, ext string, data []byte) (string, error) {
 	temp, err := os.CreateTemp(dir, ".imageworkshop-*.tmp")
 	if err != nil {
@@ -386,15 +510,25 @@ func writeConvertedFile(dir, stem, ext string, data []byte) (string, error) {
 	return placeOutputFile(tempName, dir, stem, ext)
 }
 
-// placeOutputFile 通过硬链接原子占位：目标存在时继续尝试下一个序号，绝不覆盖。
+// placeOutputFile 以不覆盖方式落位：目标名已存在时尝试下一个序号（-2、-3 …，US-16）。
+//
+// 首选硬链接（原子占位）；链接不可用（跨卷或网络盘不支持）时退化为
+// 「独占创建 + 复制」——原子性变弱，但「绝不覆盖已有文件」的承诺不破（O_EXCL）。
 func placeOutputFile(tempPath, dir, stem, ext string) (string, error) {
 	for i := 1; ; i++ {
-		suffix := "-out"
+		number := ""
 		if i > 1 {
-			suffix = fmt.Sprintf("-out-%d", i)
+			number = fmt.Sprintf("-%d", i)
 		}
-		candidate := filepath.Join(dir, stem+suffix+ext)
-		if err := os.Link(tempPath, candidate); err != nil {
+		candidate := filepath.Join(dir, stem+number+ext)
+		err := linkOutputFile(tempPath, candidate)
+		if err == nil {
+			return candidate, nil
+		}
+		if errors.Is(err, fs.ErrExist) {
+			continue
+		}
+		if err := copyExclusive(tempPath, candidate); err != nil {
 			if errors.Is(err, fs.ErrExist) {
 				continue
 			}
@@ -402,6 +536,25 @@ func placeOutputFile(tempPath, dir, stem, ext string) (string, error) {
 		}
 		return candidate, nil
 	}
+}
+
+// copyExclusive 以 O_EXCL 独占创建 dst 并复制 src 内容；中途失败清理半成品。
+func copyExclusive(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst)
+		return err
+	}
+	return out.Close()
 }
 
 func outputExtension(format string) (string, error) {

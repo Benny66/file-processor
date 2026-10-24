@@ -25,40 +25,62 @@ func validatePersistedRules(rules BatchRules) error {
 	return nil
 }
 
-// GetImageSettings 返回上次使用的处理参数；旧配置的空格式按“保持原格式”处理。
-// 值已不可用时返回默认规则与错误，调用方记录后继续使用默认值。
-func (s *Service) GetImageSettings() (BatchRules, error) {
+// GetImageSettings 返回上次使用的处理参数（规则 + 输出目的地）；旧配置的空格式按
+// “保持原格式”、空输出模式按“源文件同目录”处理。值已不可用时坏哪段回退哪段的
+// 默认值，并随错误带出——调用方记录后继续使用（US-13/US-42）。
+func (s *Service) GetImageSettings() (ImageSettings, error) {
 	if s.cfg == nil {
-		return BatchRules{}, apperr.Wrap(errors.New("配置未初始化"))
+		return ImageSettings{}, apperr.Wrap(errors.New("配置未初始化"))
 	}
 	format := s.cfg.ImageOutputFormat
 	if format == "" {
 		format = imageproc.OutputKeep
 	}
-	rules := BatchRules{
-		OutputFormat: format,
-		TargetBytes:  s.cfg.ImageTargetBytes,
-		MaxWidth:     s.cfg.ImageMaxWidth,
-		MaxHeight:    s.cfg.ImageMaxHeight,
+	settings := ImageSettings{
+		Rules: BatchRules{
+			OutputFormat: format,
+			TargetBytes:  s.cfg.ImageTargetBytes,
+			MaxWidth:     s.cfg.ImageMaxWidth,
+			MaxHeight:    s.cfg.ImageMaxHeight,
+		},
+		Output: OutputPlan{
+			Mode:      s.cfg.ImageOutputMode,
+			Directory: s.cfg.ImageOutputDirectory,
+			Pattern:   s.cfg.ImageOutputPattern,
+		},
 	}
-	if err := validatePersistedRules(rules); err != nil {
-		return BatchRules{OutputFormat: imageproc.OutputKeep}, fmt.Errorf("图片设置无效，已使用默认值: %w", err)
+	rulesErr := validatePersistedRules(settings.Rules)
+	outputErr := validateOutputPlan(settings.Output)
+	if rulesErr == nil && outputErr == nil {
+		return settings, nil
 	}
-	return rules, nil
+	if rulesErr != nil {
+		settings.Rules = BatchRules{OutputFormat: imageproc.OutputKeep}
+	}
+	if outputErr != nil {
+		settings.Output = OutputPlan{}
+	}
+	return settings, fmt.Errorf("图片设置无效，已使用默认值: %w", errors.Join(rulesErr, outputErr))
 }
 
-// SaveImageSettings 校验并持久化上次使用的处理参数。
-func (s *Service) SaveImageSettings(rules BatchRules) error {
+// SaveImageSettings 校验并持久化上次使用的处理参数（规则 + 输出目的地）。
+func (s *Service) SaveImageSettings(settings ImageSettings) error {
 	if s.cfg == nil {
 		return apperr.Wrap(errors.New("配置未初始化"))
 	}
-	if err := validatePersistedRules(rules); err != nil {
+	if err := validatePersistedRules(settings.Rules); err != nil {
 		return err
 	}
-	s.cfg.ImageOutputFormat = rules.OutputFormat
-	s.cfg.ImageTargetBytes = rules.TargetBytes
-	s.cfg.ImageMaxWidth = rules.MaxWidth
-	s.cfg.ImageMaxHeight = rules.MaxHeight
+	if err := validateOutputPlan(settings.Output); err != nil {
+		return err
+	}
+	s.cfg.ImageOutputFormat = settings.Rules.OutputFormat
+	s.cfg.ImageTargetBytes = settings.Rules.TargetBytes
+	s.cfg.ImageMaxWidth = settings.Rules.MaxWidth
+	s.cfg.ImageMaxHeight = settings.Rules.MaxHeight
+	s.cfg.ImageOutputMode = settings.Output.Mode
+	s.cfg.ImageOutputDirectory = settings.Output.Directory
+	s.cfg.ImageOutputPattern = settings.Output.Pattern
 	if err := s.cfg.Save(); err != nil {
 		return apperr.Wrap(fmt.Errorf("保存图片设置失败: %w", err))
 	}

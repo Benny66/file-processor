@@ -130,6 +130,43 @@
           <option value="MB">MB</option>
         </select>
       </template>
+      <label class="field" for="output-mode">
+        <span class="field__label">输出到</span>
+        <select
+          id="output-mode"
+          class="select"
+          :value="outputMode"
+          :disabled="busy"
+          @change="onOutputModeChange"
+        >
+          <option :value="OutputMode.Source">源文件同目录</option>
+          <option :value="OutputMode.CustomFlat">指定目录</option>
+          <option :value="OutputMode.CustomTree">指定目录·保留结构</option>
+        </select>
+      </label>
+      <button
+        v-if="outputMode !== OutputMode.Source"
+        class="btn btn--dir"
+        type="button"
+        :disabled="busy"
+        :title="outputDir || '选择输出目录'"
+        @click="chooseOutputDir"
+      >
+        {{ outputDir || '选择目录…' }}
+      </button>
+      <label class="field" for="output-pattern">
+        <span class="field__label">命名</span>
+        <input
+          id="output-pattern"
+          class="input input--pattern"
+          type="text"
+          placeholder="{name}-out"
+          :value="outputPattern"
+          :disabled="busy"
+          @input="onOutputPattern"
+        />
+      </label>
+      <span class="field__unit rules__example" :title="namingExample">{{ namingExample }}</span>
       <button class="btn btn--primary" type="button" :disabled="!canStart" @click="startBatch">
         {{ processing ? '处理中…' : '开始处理' }}
       </button>
@@ -224,7 +261,7 @@ import { useEvent } from '../../composables/useEvent'
 import { usePagedList } from '../../composables/usePagedList'
 import { EventAction, eventName } from '../../lib/event'
 import { invoke, type AppError } from '../../lib/invoke'
-import { BoxDimension, ItemStatus, OutputFormat, type OutputFormatValue } from '../../lib/image'
+import { BoxDimension, ItemStatus, OutputFormat, OutputMode, type OutputFormatValue, type OutputModeValue } from '../../lib/image'
 import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
@@ -266,6 +303,10 @@ const maxHeight = ref(1080)
 const targetEnabled = ref(false)
 const targetValue = ref(500)
 const targetUnit = ref<'KB' | 'MB'>('KB')
+// 输出目的地（US-39~42）：目录仅 custom 模式携带；命名模板空串由 Go 按默认值处理。
+const outputMode = ref<OutputModeValue>(OutputMode.Source)
+const outputDir = ref('')
+const outputPattern = ref('')
 const resultsStale = ref(false)
 const compareOpen = ref(false)
 const compareItem = ref<QueueItem | null>(null)
@@ -283,6 +324,33 @@ const currentRules = computed<PresetRules>(() => ({
   max_height: sizeBoxEnabled.value ? maxHeight.value : 0,
 }))
 
+const outputPlan = computed<service.OutputPlan>(() => ({
+  mode: outputMode.value,
+  directory: outputMode.value === OutputMode.Source ? '' : outputDir.value,
+  pattern: outputPattern.value,
+}))
+
+// 「上次设置」的整体：规则 + 输出目的地（预设只带规则，D-34）。
+// 保持纯对象形状；传给绑定时经 new service.ImageSettings(...) 转换（生成类带 convertValues）。
+const currentSettings = computed(() => ({
+  rules: currentRules.value,
+  output: outputPlan.value,
+}))
+
+// 命名示例：用队列第一张（或 photo.jpg 样例）实时渲染模板效果。
+const namingExample = computed(() => {
+  const sample = items.value.find((item) => !item.error)?.name ?? 'photo.jpg'
+  const stem = sample.replace(/\.[^.]+$/, '') || sample
+  const ext =
+    outputFormat.value === OutputFormat.Keep
+      ? (sample.match(/\.[^.]+$/)?.[0] ?? '.png')
+      : `.${outputFormat.value === OutputFormat.JPEG ? 'jpg' : outputFormat.value}`
+  const rendered = (outputPattern.value || '{name}-out')
+    .replaceAll('{name}', stem)
+    .replaceAll('{n}', '1')
+  return `${sample} → ${rendered}${ext}`
+})
+
 // 「能不能开始」由 Go 判定（US-11），前端只转述它给的原因。
 //
 // 此前这里复制了一份 Go 的范围校验（targetValid/sizeBoxValid）加三条手写文案，
@@ -295,7 +363,8 @@ async function refreshRuleProblem(): Promise<void> {
   const token = ++ruleToken
   let message: string
   try {
-    message = (await invoke(() => ValidateImageRules(currentRules.value), 'ValidateImageRules')) ?? ''
+    message =
+      (await invoke(() => ValidateImageRules(currentRules.value, outputPlan.value), 'ValidateImageRules')) ?? ''
   } catch (e) {
     // 预检本身失败时【失败关闭】：宁可不让开始，也不能带着未知规则开跑。
     message = e instanceof Error ? e.message : '规则校验暂时不可用'
@@ -305,7 +374,7 @@ async function refreshRuleProblem(): Promise<void> {
   if (disposed || token !== ruleToken) return
   ruleProblem.value = message
 }
-watch(currentRules, () => void refreshRuleProblem(), { immediate: true })
+watch([currentRules, outputPlan], () => void refreshRuleProblem(), { immediate: true })
 
 const canStart = computed(
   () =>
@@ -403,9 +472,26 @@ function applyRules(rules: PresetRules) {
   }
 }
 
+function applyOutput(output: service.OutputPlan) {
+  if (
+    output.mode === OutputMode.Source ||
+    output.mode === OutputMode.CustomFlat ||
+    output.mode === OutputMode.CustomTree
+  ) {
+    outputMode.value = output.mode
+  } else {
+    outputMode.value = OutputMode.Source
+  }
+  outputDir.value = output.directory ?? ''
+  outputPattern.value = output.pattern ?? ''
+}
+
 async function saveImageSettings() {
   try {
-    await invoke(() => SaveImageSettings(currentRules.value), 'SaveImageSettings')
+    await invoke(
+      () => SaveImageSettings(new service.ImageSettings(currentSettings.value)),
+      'SaveImageSettings',
+    )
   } catch (e) {
     logWarn('保存上次设置失败', e)
   }
@@ -442,7 +528,8 @@ async function loadSupportedFormats(): Promise<void> {
 async function loadImageSettings() {
   try {
     const saved = await invoke(() => GetImageSettings(), 'GetImageSettings')
-    applyRules(saved)
+    applyRules(saved.rules)
+    applyOutput(saved.output)
   } catch (e) {
     logWarn('恢复上次设置失败，使用默认值', e)
   } finally {
@@ -451,7 +538,18 @@ async function loadImageSettings() {
 }
 
 watch(
-  [outputFormat, sizeBoxEnabled, maxWidth, maxHeight, targetEnabled, targetValue, targetUnit],
+  [
+    outputFormat,
+    sizeBoxEnabled,
+    maxWidth,
+    maxHeight,
+    targetEnabled,
+    targetValue,
+    targetUnit,
+    outputMode,
+    outputDir,
+    outputPattern,
+  ],
   () => {
     markResultsStale()
     scheduleSettingsSave()
@@ -643,16 +741,19 @@ function applyBatchResult(result: BatchResult) {
 
 async function startBatch() {
   if (!canStart.value) return
-  const batchPaths = items.value.filter((item) => !item.error).map((item) => item.path)
-  if (batchPaths.length === 0) return
+  // Items 携带导入时的相对路径：保留结构模式（US-40）靠它重建目录层级。
+  const batchItems = items.value
+    .filter((item) => !item.error)
+    .map((item) => ({ path: item.path, rel_path: item.rel_path ?? '' }))
+  if (batchItems.length === 0) return
   processing.value = true
   canceling.value = false
   processed.value = 0
-  total.value = batchPaths.length
+  total.value = batchItems.length
   batchSummary.value = null
   actionError.value = null
   importNote.value = null
-  const inBatch = new Set(batchPaths)
+  const inBatch = new Set(batchItems.map((item) => item.path))
   for (const item of items.value) {
     item.result = null
     item.processing = false
@@ -663,8 +764,9 @@ async function startBatch() {
   try {
     await flushSettingsSave()
     const request = new service.BatchRequest({
-      paths: batchPaths,
+      items: batchItems,
       rules: currentRules.value,
+      output: outputPlan.value,
     })
     const result = await invoke(() => ProcessBatch(request), 'ProcessBatch')
     applyBatchResult(result)
@@ -721,6 +823,24 @@ function onTargetValue(event: Event) {
 
 function onTargetUnit(event: Event) {
   targetUnit.value = (event.target as HTMLSelectElement).value as 'KB' | 'MB'
+}
+
+function onOutputModeChange(event: Event) {
+  outputMode.value = (event.target as HTMLSelectElement).value as OutputModeValue
+}
+
+function onOutputPattern(event: Event) {
+  outputPattern.value = (event.target as HTMLInputElement).value.trim()
+}
+
+async function chooseOutputDir() {
+  try {
+    const directory = await invoke(() => SelectDirectory('选择输出目录'), 'SelectDirectory')
+    if (directory) outputDir.value = directory
+  } catch (e) {
+    actionError.value = e as AppError
+    logError('打开输出目录选择器失败', e)
+  }
 }
 
 function dismissSummary() {
@@ -964,6 +1084,25 @@ onUnmounted(() => {
 
 .select--unit {
   width: 78px;
+}
+
+.input--pattern {
+  width: 150px;
+  text-align: left;
+}
+
+.btn--dir {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rules__example {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field__sep,

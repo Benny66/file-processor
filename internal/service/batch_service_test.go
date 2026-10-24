@@ -30,7 +30,7 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 	var progress []BatchProgress
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, MaxWidth: 200, MaxHeight: 200},
 		},
 		func(p BatchProgress) { progress = append(progress, p) },
@@ -82,7 +82,7 @@ func TestProcessBatchConvertsAndNeverOverwrites(t *testing.T) {
 
 	result2, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, MaxWidth: 200, MaxHeight: 200},
 		},
 		nil,
@@ -128,7 +128,7 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{corrupt, valid},
+			Items: batchItems(corrupt, valid),
 			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG},
 		},
 		nil,
@@ -175,7 +175,7 @@ func TestProcessBatchLogsEachFailure(t *testing.T) {
 	svc := &Service{}
 	if _, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{corrupt},
+			Items: batchItems(corrupt),
 			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG},
 		},
 		nil,
@@ -223,7 +223,7 @@ func TestProcessBatchReportsAlphaFlattened(t *testing.T) {
 
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
-		BatchRequest{Paths: []string{path}, Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
+		BatchRequest{Items: batchItems(path), Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
 		nil,
 	)
 	if err != nil {
@@ -256,7 +256,7 @@ func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{within, outside, same},
+			Items: batchItems(within, outside, same),
 			Rules: BatchRules{OutputFormat: imageproc.OutputKeep, MaxWidth: 200, MaxHeight: 200},
 		},
 		nil,
@@ -314,7 +314,7 @@ func TestProcessBatchTargetSize(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{OutputFormat: imageproc.OutputJPEG, TargetBytes: 30 * 1024},
 		},
 		nil,
@@ -346,7 +346,7 @@ func TestProcessBatchTargetExtreme(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{
 				OutputFormat: imageproc.OutputPNG,
 				MaxWidth:     200,
@@ -384,7 +384,7 @@ func TestProcessBatchTargetSkipsSmallSource(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{OutputFormat: imageproc.OutputKeep, TargetBytes: 1024},
 		},
 		nil,
@@ -417,7 +417,7 @@ func TestProcessBatchTargetWithBox(t *testing.T) {
 	svc := &Service{}
 	result, err := svc.ProcessBatch(
 		BatchRequest{
-			Paths: []string{src},
+			Items: batchItems(src),
 			Rules: BatchRules{
 				OutputFormat: imageproc.OutputJPEG,
 				MaxWidth:     300,
@@ -460,7 +460,7 @@ func TestProcessBatchRejectsUnsupportedRules(t *testing.T) {
 		{OutputFormat: imageproc.OutputPNG, MaxWidth: 100, MaxHeight: -1},
 	}
 	for _, rules := range cases {
-		_, err := svc.ProcessBatch(BatchRequest{Paths: []string{src}, Rules: rules}, nil)
+		_, err := svc.ProcessBatch(BatchRequest{Items: batchItems(src), Rules: rules}, nil)
 		var ae *apperr.Error
 		if !errors.As(err, &ae) || ae.Code != apperr.CodeValidation {
 			t.Errorf("规则 %+v 未被拒绝：%v", rules, err)
@@ -486,7 +486,7 @@ func TestProcessBatchCancelsRemaining(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		result, err := svc.ProcessBatch(
-			BatchRequest{Paths: paths, Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
+			BatchRequest{Items: batchItems(paths...), Rules: BatchRules{OutputFormat: imageproc.OutputJPEG}},
 			func(p BatchProgress) {
 				once.Do(func() { svc.CancelBatch() })
 			},
@@ -528,6 +528,15 @@ func TestProcessBatchCancelsRemaining(t *testing.T) {
 		}
 	}
 	svc.CancelBatch()
+}
+
+// batchItems 把绝对路径列表装进批次请求（RelPath 为空：source / custom_flat 模式用不到）。
+func batchItems(paths ...string) []BatchItem {
+	items := make([]BatchItem, len(paths))
+	for i, path := range paths {
+		items[i] = BatchItem{Path: path}
+	}
+	return items
 }
 
 func batchNoisePNG(t *testing.T, w, h int) []byte {

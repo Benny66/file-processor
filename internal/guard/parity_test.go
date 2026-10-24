@@ -102,6 +102,14 @@ func TestFrontendMirrorsMatchGoSourceOfTruth(t *testing.T) {
 			tsObject: "TargetBytes",
 			goPrefix: "TargetBytes",
 		},
+		{
+			// 输出目的地模式（internal/service 的 OutputMode*）
+			name:     "图片输出模式",
+			goPkg:    "internal/service",
+			tsFile:   "frontend/src/lib/image.ts",
+			tsObject: "OutputMode",
+			goPrefix: "OutputMode",
+		},
 	}
 
 	root := projectRoot()
