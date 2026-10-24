@@ -56,6 +56,20 @@ CI MUST 编译并上传产物，且矩阵 MUST 只包含能稳定通过的平台
 - **THEN** 它的 Go 层行为仍由静态检查腿覆盖（测试 / 护栏 / lint / 生成器端到端），
   只是不再承诺其产物可编译
 
+### Requirement: Linux .deb 双架构构建
+CI MUST 产出 linux amd64 与 arm64 两个架构的 `.deb` artifact；两者 MUST 使用同一套钉死的
+`ubuntu:20.04` 构建环境（glibc 2.31 + WebKitGTK 4.0）。arm64 MUST 经容器内 clang/lld
+交叉构建，MUST NOT 使用 QEMU 模拟（段错误前科，见 ADR-0002/0006）。
+
+#### Scenario: 双架构 artifact
+- **WHEN** CI 运行 `linux-deb` 与 `linux-deb-arm64` job
+- **THEN** 分别产出 `*_amd64.deb` 与 `*_arm64.deb` artifact，
+  产物 ELF 架构与 `.deb` 的 Architecture 字段经脚本断言
+
+#### Scenario: arm64 不进 Release
+- **WHEN** 查看 tag 发布的资产
+- **THEN** 不含 arm64 `.deb`——信创 arm64 未经真机验收前仅作为 CI artifact（D-45）
+
 ### Requirement: 发版前先过静态检查
 发布工作流 MUST 在构建安装包之前执行静态检查，MUST NOT 从检查不通过的提交发版。
 

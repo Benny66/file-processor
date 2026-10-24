@@ -121,6 +121,10 @@ macOS 打包 MUST 在 `.app` 之后封装为 `.dmg` 安装包，并在产出后*
 - **WHEN** 某平台的安装包只能在对应操作系统上构建（如 Linux `.deb` 的钉死 `ubuntu:20.04` 容器）
 - **THEN** 由 tag 发布工作流中独立的 `package-linux` job 产出，经 artifact 汇入同一次 Release，不要求操作者具备所有平台
 
+#### Scenario: 信创 arm64 仅 artifact
+- **WHEN** CI 产出 linux/arm64 `.deb`
+- **THEN** 它作为 workflow artifact 提供，不进入 tag Release——飞腾/鲲鹏未经真机验收前不宣称可发布（ADR-0006，D-45）
+
 ### Requirement: 版本号写入必须单一实现
 把版本号写进配置的代码 MUST 只有一处实现，本地发布与 CI 发布 MUST 共用它。
 

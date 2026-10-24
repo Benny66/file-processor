@@ -65,7 +65,7 @@
 | `scripts/app-name.sh` | 从 `wails.json` 读取产物名（打包/冒烟/发布脚本共用；实际解析在 `wails-info.sh`） |
 | `scripts/wails-info.sh` | **`wails.json` 字段读取唯一入口**（sed 实现，不依赖 python3——CI 的 ubuntu:20.04 容器里没有它） |
 | `scripts/build.sh` | **版本注入唯一入口**：读 `wails.json` 的 `info.productVersion`，同时喂给产物与 `-ldflags`。`wails build` 只允许出现在这里，护栏 `TestWailsBuildHasSingleEntryPoint` 拦别的直调 |
-| `.github/workflows/` | `build.yml`（检查 + 编译矩阵）、`release.yml`（tag 触发自动发布） |
+| `.github/workflows/` | `build.yml`（检查 + 编译矩阵 + linux-deb amd64/arm64）、`release.yml`（tag 触发自动发布） |
 | `scripts/gen.sh` | 模块生成器（`make gen name=<module>`） |
 | `scripts/verify-gen.sh` | 生成器端到端验证（`make verify-gen`） |
 | `scripts/package.sh` | 打包（dmg / NSIS 安装器 / Linux .deb；非 Linux 宿主经 Docker） |

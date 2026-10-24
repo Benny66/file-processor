@@ -92,6 +92,32 @@ jobs:
           name: linux-deb
           path: build/bin/*.deb
           if-no-files-found: error
+
+  # 信创 arm64（飞腾/鲲鹏）.deb：amd64 容器内 clang/lld 交叉构建（ADR-0006；
+  # QEMU 模拟在 dpkg/Go 阶段有段错误前科，不走模拟）。
+  # 跑在 VM 而非 container 指令里：本腿需要 docker 起交叉构建容器。
+  # 只产 artifact、不接 Release——arm64 未经真机验收前不宣称可发布（D-45）。
+  linux-deb-arm64:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build frontend
+        run: cd frontend && npm install && npm run build
+
+      - name: Build and package arm64 .deb (Docker 交叉)
+        run: bash scripts/package.sh linux user arm64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb-arm64
+          path: build/bin/*_arm64.deb
+          if-no-files-found: error
   build:
     needs: check
     strategy:

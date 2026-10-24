@@ -57,8 +57,11 @@ smoke: ## 冒烟测试（构建 → 启动 → 断言 → 清理）
 package: ## 打包真安装包（make package os=windows|macos|linux [scope=user|machine]）
 	bash scripts/package.sh $(os) $(scope)
 
-linux-deb: ## 构建 Kylin/Linux .deb（macOS 上自动用 Ubuntu 20.04 容器）
-	bash scripts/package.sh linux
+# 信创目标架构（make linux-deb arch=arm64 用；默认 amd64 对应麒麟 x86_64）。
+arch ?= amd64
+
+linux-deb: ## 构建 Kylin/Linux .deb（make linux-deb [arch=amd64|arm64]；macOS 上自动用容器）
+	bash scripts/package.sh linux user $(arch)
 
 gen: ## 生成新模块（锚点注入 + 幂等）—— make gen name=<module>
 	bash scripts/gen.sh $(name)

@@ -14,7 +14,7 @@
 |---|---|---|
 | macOS | `ImageWorkshop.dmg` | macOS 10.13+（Universal 二进制） |
 | Windows | `ImageWorkshop-<版本>-windows-amd64.exe`（NSIS 安装器） | Windows 10/11 + WebView2 运行时 |
-| 银河麒麟 | `ImageWorkshop_<版本>_amd64.deb` | Kylin V10 SP1（2203）x86_64，glibc 2.31，WebKitGTK 4.0 |
+| 银河麒麟 | `ImageWorkshop_<版本>_amd64.deb`；信创飞腾/鲲鹏另有 `_<版本>_arm64.deb`（仅 CI artifact，未真机验收） | Kylin V10 SP1（2203）x86_64，glibc 2.31，WebKitGTK 4.0 |
 
 ---
 
@@ -122,6 +122,7 @@ make package os=macos                 # .dmg（仅 macOS 可产）
 make package os=windows               # NSIS .exe，默认 scope=user（免管理员）
 make package os=linux                 # .deb；macOS 上自动经 Ubuntu 20.04 容器构建
 make linux-deb                        # 同上的语义化入口
+make linux-deb arch=arm64             # 信创飞腾/鲲鹏 .deb（容器内 clang/lld 交叉，ADR-0006）
 bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成发布说明
 ```
 
@@ -133,7 +134,7 @@ bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成�
 - **自动发布**：`git tag v0.1.0 && git push origin v0.1.0` 触发 `release.yml`（先跑静态检查，
   再由 macOS / Windows / Linux `.deb` 三条腿打包并创建 Release，资产含三平台安装包与
   `SHA256SUMS.txt` 校验和）。打 tag 前先用 `bash scripts/set-version.sh 0.1.0` 把版本号提交进仓库。
-- **CI**：`build.yml` 在 push/PR 跑静态检查 + macOS/Windows 编译 + Linux `.deb` + 生成器端到端验证。
+- **CI**：`build.yml` 在 push/PR 跑静态检查 + macOS/Windows 编译 + Linux `.deb`（amd64 与信创 arm64）+ 生成器端到端验证。
 
 ## 工程约束
 
@@ -162,6 +163,8 @@ bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成�
   他人首次打开会被 Gatekeeper / SmartScreen 拦截，放行方法见「安装与首次打开」。
 - **麒麟尚未真机验收**：`.deb` 已在 Ubuntu 20.04 环境安装验证并由 CI 产出，
   但真机安装、启动、拖拽与一次真实处理仍未完成。
+- **信创 arm64 未真机验收**：`_arm64.deb` 由 CI 经 amd64 容器交叉构建产出（ADR-0006），
+  仅作为 artifact 提供、不进 Release；飞腾/鲲鹏真机验收前不宣称可发布。
 - **macOS 关闭即退出**：Wails v2 的 `NSApplication` delegate 与所有 systray 库互斥，
   macOS 不提供托盘。Windows 关闭窗口隐藏到托盘；麒麟在真机确认托盘可用前同样关闭即退出。
 - **窗口位置不持久化**：只记住尺寸与最大化状态。

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # ==========================================================================
-# package-deb.sh — 把已构建的 linux/amd64 二进制打成 .deb
+# package-deb.sh — 把已构建的 linux 二进制打成 .deb（amd64 / arm64）
 # --------------------------------------------------------------------------
+# 用法：bash scripts/package-deb.sh [amd64|arm64]（默认 amd64）
 # 输入：build/bin/ImageWorkshop（由 build.sh 原生构建或 build-linux-container.sh 产出）
-# 输出：build/bin/ImageWorkshop_<version>_amd64.deb
+# 输出：build/bin/ImageWorkshop_<version>_<arch>.deb
 #
 # 包内容（001/011 约定）：
 #   /usr/bin/ImageWorkshop
@@ -18,28 +19,45 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+ARCH="${1:-amd64}"
+[ -z "$ARCH" ] && ARCH="amd64"
+case "$ARCH" in
+  amd64|arm64) ;;
+  *)
+    echo "用法: $0 [amd64|arm64]（默认 amd64）" >&2
+    exit 1
+    ;;
+esac
+
 APP_NAME="$(bash scripts/app-name.sh)"
 BIN="build/bin/${APP_NAME}"
 [ -f "$BIN" ] || {
-  echo "错误：找不到 $BIN；请先构建 linux/amd64 二进制。" >&2
+  echo "错误：找不到 $BIN；请先构建 linux 二进制。" >&2
   exit 1
 }
 
-if command -v file >/dev/null 2>&1; then
-  FILE_INFO="$(file -b "$BIN")"
-  case "$FILE_INFO" in
-    *x86-64*|*x86_64*) ;;
-    *)
-      echo "错误：$BIN 不是 x86-64 ELF（$FILE_INFO）。麒麟不能运行该架构。" >&2
+# ELF 架构断言：错架构的包发出去就是「装上跑不起来」，必须在打包前拦住。
+assert_elf_arch() {
+  case "$ARCH" in
+    amd64) printf '%s' "$1" | grep -Eq 'x86-64|x86_64' || {
+      echo "错误：$BIN 不是 x86-64 ELF（$1）。麒麟不能运行该架构。" >&2
       exit 1
-      ;;
+    } ;;
+    arm64) printf '%s' "$1" | grep -Eq 'aarch64|arm64' || {
+      echo "错误：$BIN 不是 aarch64 ELF（$1）。信创飞腾/鲲鹏不能运行该架构。" >&2
+      exit 1
+    } ;;
   esac
+}
+
+if command -v file >/dev/null 2>&1; then
+  assert_elf_arch "$(file -b "$BIN")"
 else
   # 精简镜像可能没有 file；readelf 随 build-essential 的 binutils 提供。
-  readelf -h "$BIN" | grep -q 'X86-64' || {
-    echo "错误：$BIN 不是 x86-64 ELF。麒麟不能运行该架构。" >&2
-    exit 1
-  }
+  case "$ARCH" in
+    amd64) assert_elf_arch "$(readelf -h "$BIN" | grep -o 'X86-64')" ;;
+    arm64) assert_elf_arch "$(readelf -h "$BIN" | grep -o 'AArch64')" ;;
+  esac
 fi
 
 # 字段读取统一走 scripts/wails-info.sh：本脚本曾在 CI 的 ubuntu:20.04 容器里
@@ -56,7 +74,7 @@ MAINTAINER="$(printf '%s <%s>' \
   "$(bash scripts/wails-info.sh author.name)" \
   "$(bash scripts/wails-info.sh author.email)")"
 
-DEB_NAME="${APP_NAME}_${VERSION}_amd64.deb"
+DEB_NAME="${APP_NAME}_${VERSION}_${ARCH}.deb"
 OUT="build/bin/${DEB_NAME}"
 STAGING="$(mktemp -d "$ROOT/build/.deb-staging.XXXXXX")"
 # mktemp 默认 0700；包内 "./" 的模式会落到安装根目录，必须是 0755。
@@ -82,7 +100,7 @@ INSTALLED_SIZE="$(du -sk "$STAGING" | awk '{print $1}')"
 cat > "$STAGING/DEBIAN/control" <<EOF
 Package: imageworkshop
 Version: ${VERSION}
-Architecture: amd64
+Architecture: ${ARCH}
 Maintainer: ${MAINTAINER}
 Installed-Size: ${INSTALLED_SIZE}
 Depends: libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.0-37 (>= 2.28.1)

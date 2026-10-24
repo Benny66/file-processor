@@ -2,13 +2,15 @@
 # ==========================================================================
 # package.sh — 参数化打包（真安装包）
 # --------------------------------------------------------------------------
-# 用法：bash scripts/package.sh [os] [scope]
+# 用法：bash scripts/package.sh [os] [scope] [arch]
 #   - 无参              → 打包当前平台
 #   - windows [user|machine] → 交叉编译 Windows .exe 安装器（mac/linux 上可用），
 #                         scope 默认 user（免管理员）
 #   - macos             → 仅 mac 上可用，产出美化 dmg（含 Applications 软链）
-#   - linux             → 产出 .deb；Linux 上原生构建，mac/Windows 上经 Docker
-#                         在 Ubuntu 20.04 环境构建（Kylin glibc 2.31 / WebKit 4.0）
+#   - linux [arch]      → 产出 .deb；arch 默认 amd64，可 arm64（信创飞腾/鲲鹏，
+#                         ADR-0006，Docker 内交叉）。amd64 在带 webkit4.0 的 Linux
+#                         宿主原生构建，mac/Windows 上经 Ubuntu 20.04 容器构建
+#                         （Kylin glibc 2.31 / WebKit 4.0）；arm64 一律走容器交叉
 #
 # 母版防呆：检测到 file-processor 占位符残留则拒绝打包（母版不能直接打包）。
 # ==========================================================================
@@ -19,6 +21,8 @@ cd "$ROOT"
 
 OS="${1:-}"
 SCOPE="${2:-user}"   # windows 安装范围：user（默认，免管理员）/ machine
+LINUX_ARCH="${3:-amd64}"   # linux 目标架构：amd64（默认）/ arm64（信创，见 ADR-0006）
+[ -z "$LINUX_ARCH" ] && LINUX_ARCH="amd64"
 
 # ---- 母版防呆：占位符残留则拒绝打包 ----
 # 注意：检测字符串不能写成裸 file-processor（会被 init.sh 全局替换成项目名，
@@ -199,13 +203,15 @@ APPLESCRIPT
     ;;
   linux)
     # 麒麟只提供 webkit2gtk-4.0（001），因此绝不能用 webkit2_41。
-    # Linux 宿主若只有 4.1（Ubuntu 24.04+），同样回落到 20.04 容器。
-    if [ "$CUR_PLATFORM" = "linux" ] && pkg-config --exists webkit2gtk-4.0 2>/dev/null; then
-      bash scripts/build.sh -clean
+    # arm64（信创飞腾/鲲鹏，ADR-0006）一律走容器交叉；amd64 在带 webkit4.0 的
+    # Linux 宿主上原生构建，否则（mac 宿主 / 只有 4.1 的 Ubuntu 24.04+）回落 20.04 容器。
+    if [ "$LINUX_ARCH" = "arm64" ] || \
+       ! { [ "$CUR_PLATFORM" = "linux" ] && pkg-config --exists webkit2gtk-4.0 2>/dev/null; }; then
+      bash scripts/build-linux-container.sh "$LINUX_ARCH"
     else
-      bash scripts/build-linux-container.sh
+      bash scripts/build.sh -clean
     fi
-    bash scripts/package-deb.sh
+    bash scripts/package-deb.sh "$LINUX_ARCH"
     ;;
   windows)
     if command -v makensis >/dev/null 2>&1; then
