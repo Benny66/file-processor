@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- 托盘图标源：主图（appicon.svg）的单色剪影简化版，无底板、无渐变、无山日细节。
+       用品牌蓝双阶而非纯黑：浅色/深色任务栏上都可见（纯黑在深色任务栏不可见）。
+       派生 build/tray.png（32px），由 main.go embed 作托盘图标（ADR-0008）。 -->
+  <!-- 后层照片剪影 -->
+  <g transform="rotate(-9 470 430)">
+    <rect x="290" y="210" width="360" height="440" rx="56" fill="#3a5cb0" opacity="0.45"/>
+  </g>
+  <!-- 前层照片剪影 -->
+  <rect x="250" y="300" width="380" height="470" rx="56" fill="#3a5cb0"/>
+  <!-- 斜压箭头：深一阶，压在前层剪影上仍可分辨 -->
+  <g transform="translate(786 176) rotate(43)">
+    <rect x="-30" y="0" width="60" height="170" rx="8" fill="#1c2d6c"/>
+    <path d="M-88 170 L88 170 L0 300 Z" fill="#1c2d6c"/>
+  </g>
+</svg>

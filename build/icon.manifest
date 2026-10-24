@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "sources": {
+    "build/appicon.svg": "11164621afbe8b5db16f2699301a6d477301b92b515e171cdcf8e71417f7fa49",
+    "build/tray.svg": "637f2672a15c62067a15654eefb86abf1c620925046bbb0b51ed251b400b8b1d",
+    "build/darwin/dmg-bg-tpl.svg": "9b19f9f8bbb55512fa8f0f81fd939121dc44badb667877919dc66ef183b8d16a"
+  },
+  "derived": {
+    "build/appicon.png": "3d5871aced2f11363535f4685466b7a904862af47e0664ce3ff96d49683a0f78",
+    "build/windows/icon.ico": "676cff2ca991853496d841c60232f7cb2a3f41af0389f67646db8d57607fec8b",
+    "build/tray.png": "ffbe40423e4eb84f36f78415e0575026e071c3c0aae5accc008f5c7041925ba2",
+    "build/darwin/dmg-background.tpl.png": "834ffaf28ccb9d19e48cb449de4eee31db0ab975fef6c1ede0f038e73642bd08"
+  }
+}

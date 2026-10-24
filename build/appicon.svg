@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- 图片工坊应用图标（全平台单源）：叠照 + 斜压箭头，品牌蓝渐变底板。
+       语义：一叠图片被压实变小（批量 + 压缩）。派生物见 make icon（ADR-0008）。 -->
+  <defs>
+    <linearGradient id="board" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6e9bf2"/>
+      <stop offset="1" stop-color="#3a63c9"/>
+    </linearGradient>
+    <filter id="cardShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#1c2d6c" flood-opacity="0.28"/>
+    </filter>
+    <clipPath id="frontCard">
+      <rect x="250" y="300" width="380" height="470" rx="48"/>
+    </clipPath>
+  </defs>
+
+  <!-- squircle 底板：848/1024 居中，兼容 macOS 图标网格，Windows/Linux 直接用 -->
+  <rect x="88" y="88" width="848" height="848" rx="196" fill="url(#board)"/>
+
+  <!-- 后层照片：轻微左倾，灰蓝纸片 -->
+  <g transform="rotate(-9 470 430)" filter="url(#cardShadow)">
+    <rect x="290" y="210" width="360" height="440" rx="44" fill="#d9e4f8"/>
+  </g>
+
+  <!-- 前层照片：白卡 + 山日图形（通用的「照片」符号） -->
+  <g filter="url(#cardShadow)">
+    <rect x="250" y="300" width="380" height="470" rx="48" fill="#ffffff"/>
+  </g>
+  <g clip-path="url(#frontCard)">
+    <circle cx="500" cy="420" r="50" fill="#ffc94d"/>
+    <path d="M250 770 L420 545 L520 660 L590 570 L630 640 L630 770 Z" fill="#c8d9f7"/>
+    <path d="M340 770 L500 585 L630 745 L630 770 Z" fill="#a8c3ef"/>
+  </g>
+
+  <!-- 斜压箭头：从右上压向照片堆，16px 下是全图最亮的识别斜杠 -->
+  <g transform="translate(786 176) rotate(43)" filter="url(#cardShadow)">
+    <rect x="-27" y="0" width="54" height="170" rx="6" fill="#ffffff"/>
+    <path d="M-78 170 L78 170 L0 292 Z" fill="#ffffff"/>
+  </g>
+</svg>

@@ -12,7 +12,7 @@ WAILS := $(shell go env GOPATH)/bin/wails
 # 递归展开只在使用到它的 recipe 里求值，那时 require-dist 前置检查已通过。
 GO_PKGS = $(shell go list ./... | grep -v node_modules)
 
-.PHONY: help dev build test lint smoke package linux-deb gen verify-gen require-dist
+.PHONY: help dev build test lint smoke package linux-deb gen verify-gen require-dist icon
 
 help: ## 列出所有命令及用途
 	@echo "可用命令："
@@ -68,3 +68,8 @@ gen: ## 生成新模块（锚点注入 + 幂等）—— make gen name=<module>
 
 verify-gen: ## 生成器端到端验证（临时沙箱：生成 2 个模块 → 编译 → 护栏）
 	bash scripts/verify-gen.sh
+
+# 图标资产派生（ADR-0008）：改 build/*.svg 后跑它，产物与 icon.manifest 一起提交。
+# 依赖 frontend 的 devDependencies（@resvg/resvg-js、png-to-ico），本地跑，CI 不栅格化。
+icon: ## 从 build/*.svg 重新派生图标资产（appicon.png / icon.ico / tray.png / dmg 模板）
+	cd frontend && node scripts/icon.mjs

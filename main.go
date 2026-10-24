@@ -27,7 +27,7 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
-//go:embed build/appicon.png
+//go:embed build/tray.png
 var trayIconBytes []byte
 
 // appName 应用标识，用于定位用户配置目录下的数据文件与日志。
@@ -190,7 +190,8 @@ func main() {
 	}
 }
 
-// trayIcon 返回托盘图标字节。
+// trayIcon 返回托盘图标字节（build/tray.png，主图的单色剪影版，
+// 由 build/tray.svg 经 make icon 派生，见 ADR-0008）。
 func trayIcon() []byte {
 	return trayIconBytes
 }

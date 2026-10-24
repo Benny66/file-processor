@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400">
+  <!-- dmg 安装背景模板源：浅色品牌调渐变 + 顶部安装提示。
+       应用名（y≈290）与拖拽箭头（y=200）由 scripts/compose-dmg-bg.sh 在打包期
+       swift 合成叠加，此处只画底与提示文字（顶部 0–150 为提示保留区，勿放图形）。
+       派生 build/darwin/dmg-background.tpl.png（ADR-0008）。 -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#f7faff"/>
+      <stop offset="1" stop-color="#e0eaf9"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.18" cy="0.05" r="0.9">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="400" fill="url(#bg)"/>
+  <rect width="600" height="400" fill="url(#glow)"/>
+  <text x="300" y="62" text-anchor="middle"
+        font-family="PingFang SC, Hiragino Sans GB, Microsoft YaHei, sans-serif"
+        font-size="17" fill="#8fa3c4">把左边的图标拖到右边文件夹，完成安装</text>
+</svg>

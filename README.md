@@ -144,6 +144,8 @@ bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成�
 
 - **单一真相**：模型清单在 `internal/model`，依赖清单在 `deps.yaml`，数据目录在 `internal/appdir`，
   版本号在 `wails.json`。前端镜像只允许复制常量与类型，不允许复制逻辑。
+- **图标资产单源派生**：`build/*.svg` 是唯一源，`make icon` 派生 `appicon.png` / `icon.ico` /
+  托盘剪影 / dmg 模板并登记哈希；派生物入库、不许手改，护栏校验一致性（ADR-0008）。
 - **契约镜像校验**：错误码 / 事件动作 / 分页 / 输出格式 / 处理状态 / 尺寸盒 / 目标体积等常量由
   `internal/guard/parity_test.go` 双向核对，Go 改了前端没跟上即失败。
 - **接线不静默缺失**：日志桥接、拖拽开关、版本注入入口、Go 事件与前端订阅、启动底色与设计令牌

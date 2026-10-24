@@ -74,6 +74,8 @@
 | `scripts/package-deb.sh` | 把已构建的 linux/amd64 二进制打成 `.deb` |
 | `scripts/release.sh` | 版本号 + 打包 + release 说明 |
 | `scripts/smoke.sh` | 冒烟测试（构建 → 启动 → 断言 → 清理） |
+| `frontend/scripts/icon.mjs` | **图标派生唯一入口**（`make icon`：SVG → PNG/ICO + manifest，ADR-0008） |
+| `build/*.svg` + `build/icon.manifest` | 图标唯一源（appicon / tray / dmg 模板）与派生哈希登记（护栏校验，派生物不许手改） |
 | `build/darwin/` | macOS 打包资源（Info.plist、dmg 背景模板） |
 | `build/windows/` | Windows 打包资源（manifest、NSIS 脚本） |
 | `build/linux/` | Linux 打包资源（desktop entry、Ubuntu 20.04 构建镜像） |

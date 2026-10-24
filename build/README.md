@@ -1,35 +1,25 @@
-# Build Directory
+# build/ — 构建资源与图标资产
 
-The build directory is used to house all the build files and assets for your application. 
+## 图标资产管线（ADR-0008）
 
-The structure is:
+SVG 是唯一源，派生物入库、**不许手改**（护栏 `internal/guard/icon_test.go` 校验哈希，
+不一致 `make test` 直接红）。改图标：改 SVG → `make icon` → 连同派生物与 manifest 提交。
 
-* bin - Output directory
-* darwin - macOS specific files
-* windows - Windows specific files
+| 文件 | 角色 |
+|---|---|
+| `appicon.svg` | **源**：应用图标（全平台单源，叠照 + 斜压箭头，品牌蓝渐变） |
+| `tray.svg` | **源**：托盘单色剪影（品牌蓝双阶，深浅任务栏都可见） |
+| `darwin/dmg-bg-tpl.svg` | **源**：dmg 安装背景模板（应用名与箭头由打包期 swift 合成） |
+| `appicon.png` | 派生 1024：macOS icns 源（Wails 构建时生成）/ Linux hicolor 源（package-deb.sh 复制） |
+| `windows/icon.ico` | 派生 16–256：exe 与 NSIS 安装器图标 |
+| `tray.png` | 派生 32：托盘图标（`main.go` //go:embed） |
+| `darwin/dmg-background.tpl.png` | 派生 600×400：`scripts/compose-dmg-bg.sh` 的底图 |
+| `icon.manifest` | 源 + 派生物 sha256 登记表（`frontend/scripts/icon.mjs` 生成，护栏消费） |
 
-## Mac
+## 各平台打包资源
 
-The `darwin` directory holds files specific to Mac builds.
-These may be customised and used as part of the build. To return these files to the default state, simply delete them
-and
-build with `wails build`.
-
-The directory contains the following files:
-
-- `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
-- `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
-
-## Windows
-
-The `windows` directory contains the manifest and rc files used when building with `wails build`.
-These may be customised for your application. To return these files to the default state, simply delete them and
-build with `wails build`.
-
-- `icon.ico` - The icon used for the application. This is used when building using `wails build`. If you wish to
-  use a different icon, simply replace this file with your own. If it is missing, a new `icon.ico` file
-  will be created using the `appicon.png` file in the build directory.
-- `installer/*` - The files used to create the Windows installer. These are used when building using `wails build`.
-- `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
-  as well as the application itself (right click the exe -> properties -> details)
-- `wails.exe.manifest` - The main application manifest file.
+- `darwin/`：Info.plist（`wails build` / `wails dev` 各一份）。
+- `windows/`：manifest、icon.ico、NSIS 安装器脚本、info.json。
+- `linux/`：desktop entry、Ubuntu 20.04 构建镜像（.deb 的 hicolor 图标由 package-deb.sh
+  从 `appicon.png` 复制，无需单独的图标文件）。
+- `bin/`：构建产物（不入库）。
