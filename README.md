@@ -76,6 +76,25 @@
 3. 点「开始处理」。默认 2 个 worker 并行，界面保持可滚动、可查看已完成结果。
 4. 到源文件同目录取 `-out` 结果。
 
+## 安装与首次打开
+
+安装包发布在 GitHub Release（打 tag 自动构建），也可以直接把安装包文件发给朋友。
+本应用为个人分发、**未做代码签名与公证**，朋友首次打开会被系统拦一次，按对应平台放行即可（每台机器只需一次）：
+
+| 平台 | 安装 | 首次打开被拦时 |
+|---|---|---|
+| macOS | 打开 `.dmg`，把图片工坊拖进 Applications | 右键点应用 →「打开」→ 再点「打开」；或到 系统设置 → 隐私与安全性 点「仍要打开」 |
+| Windows | 运行 `-setup.exe` 安装器（默认免管理员） | SmartScreen 蓝框出现时点「更多信息」→「仍要运行」 |
+| 银河麒麟 | `sudo dpkg -i ImageWorkshop-*-linux-amd64.deb`，缺依赖时 `sudo apt -f install` | 一般无拦截 |
+
+安装包经网盘或聊天工具转发后，建议核对完整性——每个 Release 附 `SHA256SUMS.txt`：
+
+```bash
+shasum -a 256 -c SHA256SUMS.txt      # macOS / Linux：安装包与 SHA256SUMS.txt 放同一目录后执行
+```
+
+Windows 用 `certutil -hashfile <安装包文件名> SHA256`，与 `SHA256SUMS.txt` 中的对应行人工比对。
+
 ## 从源码构建
 
 | 依赖 | 版本 | 说明 |
@@ -112,8 +131,8 @@ bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成�
   声明 `libc6 (>= 2.31), libgtk-3-0, libwebkit2gtk-4.0-37 (>= 2.28.1)`。构建固定
   Ubuntu 20.04 / WebKitGTK 2.28.1 以匹配麒麟的 glibc 与 WebKit，不能跟随宿主发行版漂移。
 - **自动发布**：`git tag v0.1.0 && git push origin v0.1.0` 触发 `release.yml`（先跑静态检查，
-  再由 macOS / Windows 两条腿打包并创建 Release）。打 tag 前先用
-  `bash scripts/set-version.sh 0.1.0` 把版本号提交进仓库。
+  再由 macOS / Windows / Linux `.deb` 三条腿打包并创建 Release，资产含三平台安装包与
+  `SHA256SUMS.txt` 校验和）。打 tag 前先用 `bash scripts/set-version.sh 0.1.0` 把版本号提交进仓库。
 - **CI**：`build.yml` 在 push/PR 跑静态检查 + macOS/Windows 编译 + Linux `.deb` + 生成器端到端验证。
 
 ## 工程约束
@@ -139,16 +158,15 @@ bash scripts/release.sh 0.1.0         # 写版本号 + 三平台打包 + 生成�
 - **不支持 AVIF / HEIC**：避免引入三平台的系统编解码器依赖。
 - **不支持动图**：多帧 GIF / WebP 直接标记失败并说明原因，不静默取第一帧。
 - **不保留 ICC 色彩配置**：输出是全新编码，广色域图片可能轻微偏色。
-- **未做代码签名与公证**：macOS 产物为 ad-hoc 自签，分发给他人时 Gatekeeper 会拦截，
-  本机自用需手动允许。正式发布需补开发者签名与公证。
+- **未做代码签名与公证（个人分发，不办证书）**：macOS 产物为 ad-hoc 自签、Windows 产物未签名，
+  他人首次打开会被 Gatekeeper / SmartScreen 拦截，放行方法见「安装与首次打开」。
 - **麒麟尚未真机验收**：`.deb` 已在 Ubuntu 20.04 环境安装验证并由 CI 产出，
   但真机安装、启动、拖拽与一次真实处理仍未完成。
 - **macOS 关闭即退出**：Wails v2 的 `NSApplication` delegate 与所有 systray 库互斥，
   macOS 不提供托盘。Windows 关闭窗口隐藏到托盘；麒麟在真机确认托盘可用前同样关闭即退出。
 - **窗口位置不持久化**：只记住尺寸与最大化状态。
-- **tag 发布暂不含 Linux `.deb`**：`build.yml` 会产出并上传 artifact，接入 Release 在排期中。
-- **应用标识**：Go module 仍为 `file-processor`（产品名为图片工坊 / ImageWorkshop）；
-  macOS bundle id 目前是占位值 `com.example.imageworkshop`，发布前必须替换为公司域名。
+- **应用标识（保持现状）**：个人分发场景下 Go module 名 `file-processor` 与占位 bundle id
+  `com.example.imageworkshop` 无实际影响，不做收口；若未来需要签名公证正式分发，再统一替换。
 
 ---
 

@@ -58,9 +58,18 @@ cat > "RELEASE_NOTES.md" <<EOF
 
 ## 校验
 
+- 完整性：\`SHA256SUMS.txt\`（\`shasum -a 256 -c SHA256SUMS.txt\`）
 - 冒烟测试：\`make smoke\`
 - 静态检查：\`make lint\`
 EOF
+
+# 无签名分发：给全部产物生成校验和，朋友经网盘/IM 收到文件后可自查完整性
+# （先在 /tmp 生成再落位，避免 SHA256SUMS.txt 自己被算进去）
+if compgen -G "dist/*" > /dev/null; then
+  ( cd dist && shasum -a 256 -- * > /tmp/SHA256SUMS.txt ) \
+    && mv /tmp/SHA256SUMS.txt dist/SHA256SUMS.txt \
+    && echo "✓ 校验和已生成：dist/SHA256SUMS.txt"
+fi
 
 echo ""
 echo "✓ 完成，产物在 dist/，release 说明见 RELEASE_NOTES.md"
