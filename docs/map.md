@@ -54,7 +54,8 @@
 | `composables/` | 组合式函数（`useEvent` 自动解绑、`usePagedList` 列表加载） |
 | `styles/` | 设计令牌与主题（tokens / theme / element 覆盖） |
 | `views/` | 页面（`make gen` 生成的模块页面落在此处） |
-| `views/image/` | 图片处理工作台（导入队列、规则、批次、对比、预设） |
+| `views/image/` | 图片处理工作台（导入队列、规则、批次、对比、单张试一试、下载选项框） |
+| `views/history/` | 历史记录（批次列表 + 明细 + 再次保存） |
 
 ## 模板与工具
 
@@ -88,6 +89,7 @@
 
 | 路径 | 内容 |
 |---|---|
+| `GLOSSARY.md` | **用户可见文案的词汇单一真相**（Go 与前端同表，主规格 D-57） |
 | `openspec/specs/` | 能力规格基线（唯一真相） |
 | `openspec/changes/` | 进行中的变更提案 |
 | `docs/代码规范.md` | 命名与管道契约的编码约定 |
