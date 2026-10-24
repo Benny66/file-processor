@@ -47,6 +47,7 @@
 | `ScanPaths` | `paths []string, skip []string` | `ScanResult`：`files`（支持扩展名且可访问）+ `rejected`（不支持/不可访问/重复及原因）。`skip` 是队列已有绝对路径；不解码，保证导入快。 |
 | `InspectImage` | `path string` | `ImageInfo`：内容探测格式、方向归一后的宽高、字节数、缩略图 base64、扩展名不一致 warning。动图/损坏/超限返回可读错误。 |
 | `RenderPreview` | `path string, maxEdge int` | `Preview`：base64 data URL、宽高、是否含透明。用于单张对比。 |
+| `PreviewConvert` | `path string, rules BatchRules` | 单张真实试算（2026-10-24，US-46）：返回真实输出体积/格式/尺寸/质量/标志位与输出像素的预览 data URL，**不落盘**；已达标返回 skipped；批次运行中返回 Conflict（D-41）。 |
 | `ProcessBatch` | `BatchRequest`（items + rules + output，US-39~40） | 阻塞至批次结束并返回 `BatchResult`（**结果的唯一投递路径**）；期间发 `image:progress`，载荷含 `done`/`total`、`started`（刚被 worker 领取的项，US-14 的「处理中」来源）与 `current`（刚完成项的结果）。 |
 | `ValidateImageRules` | `BatchRules`, `OutputPlan` | 「开始处理」前的预检：合法返回空串，否则返回可直接展示的中文原因（US-11）。范围与「至少一条规则」的判定只在 Go 写一份，前端不再复制逻辑与文案。 |
 | `SupportedFormatHints` | — | 可导入格式的展示清单，由 `imageproc.supportedFormats` 投影，前端不手写清单。 |
@@ -331,6 +332,12 @@ type BatchResult struct {
 - 全部候选都无法达标时该张失败且不产出；透明→JPEG 铺白候选照常参与并随所选结果打标（D-43）。
 - 选项文案如实标注较慢（每项最多 3 次完整编码）。
 
+**US-45~48 单张调参工作台（2026-10-24 增补）**
+- US-45 进入工作台：队列中任一已检查图片可打开调参弹窗；批次处理进行中禁用（D-41）。
+- US-46 实时试算：改规则后防抖自动重算（PreviewConvert），体积/尺寸/质量/标志位为真实编码结果；已达标明确说明「不会产出文件」；试算永不写盘。
+- US-47 滑块对比与放大：源图与当前规则输出拖分割线对比，1–4 倍同步缩放（预览级，D-40）；透明区域棋盘格。
+- US-48 应用与沉淀：「应用到全部」回写工作台参数（触发结果过期标记）或「存为预设」（复用 SavePreset 校验）；两者都不自动开始批次。
+
 ## 4. 已定决策
 
 | ID | 决策 | 理由 / 后果 |
@@ -378,6 +385,9 @@ type BatchResult struct {
 | D-45 | arm64 `.deb` 仅 CI artifact，不进 Release、不宣称可用（2026-10-24） | 真机验收前「能构建 ≠ 能跑」；与麒麟 x86_64 验收同一原则。 |
 | D-42 | auto 的已达标判定 = 至少启用目标体积或尺寸盒其一且均满足（忽略格式）；两者皆未启用时不跳过（2026-10-24） | auto 用户的意图是「尽量小」；单独选 auto 正是为了重编码到最小格式，源文件谈不上已达标。 |
 | D-43 | auto 候选集固定 jpeg/webp/png（平局偏好 JPEG），透明→JPEG 铺白候选照常参与（2026-10-24） | 保持「几乎总能达标」哲学；铺白标记可见，用户可自行排除。 |
+| D-39 | 调参工作台只调既有三类规则，不暴露质量滑杆；质量作为试算结果展示（2026-10-24） | D-23 维持：目标体积仍是主控制面。 |
+| D-40 | 工作台放大镜为预览级 CSS 缩放（源 2048px），不做服务端像素级裁剪（2026-10-24） | 规格 §6「不做像素级对比查看器」边界维持；预览级缩放足够看清块效应。 |
+| D-41 | 批次运行中禁用试算（Go 侧 Conflict 拒绝）（2026-10-24） | 2 worker + 试算会过订阅 CPU；取消后自动恢复。 |
 
 ## 5. 测试决策
 
@@ -450,7 +460,7 @@ type BatchResult struct {
 - 精确宽高 + 裁切、精确宽高 + 拉伸、手动裁切框。
 - 放大（upscale）。
 - ICC 色彩管理、色彩空间转换、保留 EXIF/ICC。
-- 完整的缩放/拖拽/滑动/像素级对比查看器。
+- 完整的缩放/拖拽/滑动/像素级对比查看器（2026-10-24 修订：调参工作台提供**预览级**滑块对比与 1–4 倍缩放，见 D-40；像素级对比与全功能查看器仍不做）。
 - 云上传、账号、分享链接、遥测。
 - 视频、PDF、RAW、PSD 等其它文件类型。
 - Linux AppImage/Flatpak/Snap、Windows ARM、Linux ARM。

@@ -236,10 +236,21 @@
         @remove="removeItem"
         @compare="openCompare"
         @retry="retryOne"
+        @tune="openTune"
       />
     </ul>
 
     <CompareDialog :open="compareOpen" :item="compareItem" @close="closeCompare" />
+    <!-- 调参工作台（US-45~48）：打开时播种当前规则；「应用/存预设」后才回写工作台。 -->
+    <TuneDialog
+      :open="tuneOpen"
+      :item="tuneItem"
+      :busy="busy"
+      :rules="currentRules"
+      @close="tuneOpen = false"
+      @apply="applyTuneRules"
+      @saved="refreshPresets"
+    />
     <PresetDialog
       :open="presetDialogOpen"
       :presets="presets"
@@ -278,6 +289,7 @@ import { PageSize } from '../../lib/page'
 import { logError, logInfo, logWarn } from '../../lib/log'
 import CompareDialog from './CompareDialog.vue'
 import PresetDialog from './PresetDialog.vue'
+import TuneDialog from './TuneDialog.vue'
 import { formatBytes } from './format'
 import QueueRow from './QueueRow.vue'
 import type {
@@ -322,6 +334,8 @@ const outputPattern = ref('')
 const resultsStale = ref(false)
 const compareOpen = ref(false)
 const compareItem = ref<QueueItem | null>(null)
+const tuneOpen = ref(false)
+const tuneItem = ref<QueueItem | null>(null)
 const presetDialogOpen = ref(false)
 const selectedPresetId = ref('')
 
@@ -620,6 +634,20 @@ function openCompare(path: string) {
 
 function closeCompare() {
   compareOpen.value = false
+}
+
+function openTune(path: string) {
+  if (busy.value) return
+  const item = items.value.find((entry) => entry.path === path)
+  if (!item) return
+  tuneItem.value = item
+  tuneOpen.value = true
+}
+
+// 工作台规则回写（US-48）：只改参数不自动开跑；已有结果由既有 watch 标「已过期」。
+function applyTuneRules(rules: PresetRules) {
+  applyRules(rules)
+  void flushSettingsSave()
 }
 
 useEvent<ImageProgress>(eventName('image', EventAction.Progress), (progress) => {

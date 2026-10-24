@@ -351,6 +351,36 @@ export namespace service {
 	}
 	
 	
+	export class PreviewConvertResult {
+	    status: string;
+	    message?: string;
+	    output_bytes: number;
+	    format: string;
+	    width: number;
+	    height: number;
+	    quality: number;
+	    extreme_degraded: boolean;
+	    alpha_flattened: boolean;
+	    preview_url: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreviewConvertResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.message = source["message"];
+	        this.output_bytes = source["output_bytes"];
+	        this.format = source["format"];
+	        this.width = source["width"];
+	        this.height = source["height"];
+	        this.quality = source["quality"];
+	        this.extreme_degraded = source["extreme_degraded"];
+	        this.alpha_flattened = source["alpha_flattened"];
+	        this.preview_url = source["preview_url"];
+	    }
+	}
 	export class ScanRejection {
 	    path: string;
 	    reason: string;

@@ -185,6 +185,12 @@ func (a *App) RenderPreview(path string, maxEdge int) (imageproc.Preview, error)
 	return a.svc.RenderPreview(path, maxEdge)
 }
 
+// PreviewConvert 用给定规则对单张图做一次真实试算（US-46）：返回真实输出体积与
+// 输出像素的预览，不落盘。调参工作台的唯一数据来源；批次运行中返回 Conflict（D-41）。
+func (a *App) PreviewConvert(path string, rules service.BatchRules) (service.PreviewConvertResult, error) {
+	return a.svc.PreviewConvert(path, rules)
+}
+
 // ValidateImageRules 在发起批次之前预检规则与输出目的地，返回可直接展示的提示文案；合法时返回空串。
 // 判定与文案的单一真相都在 service，前端不再比较大小、也不再抄一份提示。
 func (a *App) ValidateImageRules(rules service.BatchRules, output service.OutputPlan) string {

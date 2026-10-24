@@ -50,6 +50,10 @@ export function OpenDataDir() {
   return window['go']['main']['App']['OpenDataDir']();
 }
 
+export function PreviewConvert(arg1, arg2) {
+  return window['go']['main']['App']['PreviewConvert'](arg1, arg2);
+}
+
 export function ProcessBatch(arg1) {
   return window['go']['main']['App']['ProcessBatch'](arg1);
 }

@@ -30,6 +30,8 @@ export function ListPresets(arg1:page.Request):Promise<page.Result_file_processo
 
 export function OpenDataDir():Promise<void>;
 
+export function PreviewConvert(arg1:string,arg2:service.BatchRules):Promise<service.PreviewConvertResult>;
+
 export function ProcessBatch(arg1:service.BatchRequest):Promise<service.BatchResult>;
 
 export function RenderPreview(arg1:string,arg2:number):Promise<imageproc.Preview>;

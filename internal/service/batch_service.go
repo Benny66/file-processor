@@ -416,25 +416,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		res.Message = err.Error()
 		return res
 	}
-	outFormat := ""
-	autoFormat := rules.OutputFormat == imageproc.OutputAuto
-	if !autoFormat {
-		outFormat, err = imageproc.NormalizeOutputFormat(rules.OutputFormat, probe.Format)
-		if err != nil {
-			res.Status = StatusFailed
-			res.Message = err.Error()
-			return res
-		}
-	}
-	boxEnabled := rules.MaxWidth > 0
-	targetOK := rules.TargetBytes == 0 || res.SourceBytes <= rules.TargetBytes
-	boxOK := !boxEnabled || (probe.Width <= rules.MaxWidth && probe.Height <= rules.MaxHeight)
-	// 已达标跳过：显式格式要求「格式一致」；auto 的判定是「至少启用目标体积或尺寸盒
-	// 其一且均满足」（D-42）——两者皆未启用时不跳过：用户单独选 auto 的意图就是
-	// 重编码到最小体积格式，此时源文件谈不上「已达标」。
-	autoConstrained := rules.TargetBytes > 0 || boxEnabled
-	if (autoFormat && autoConstrained && targetOK && boxOK) ||
-		(!autoFormat && outFormat == probe.Format && targetOK && boxOK) {
+	if shouldSkipConvert(rules, res.SourceBytes, probe.Format, probe.Width, probe.Height) {
 		res.Status = StatusSkipped
 		res.Message = "已达标"
 		res.Width = probe.Width
@@ -443,7 +425,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 	}
 
 	var converted imageproc.Converted
-	if autoFormat {
+	if rules.OutputFormat == imageproc.OutputAuto {
 		converted, err = convertBestFormat(data, path, rules)
 	} else {
 		converted, err = imageproc.Convert(data, path, imageproc.ConvertOptions{
@@ -458,7 +440,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		res.Message = err.Error()
 		return res
 	}
-	if autoFormat {
+	if rules.OutputFormat == imageproc.OutputAuto {
 		res.Message = fmt.Sprintf("自动选择 %s（最优）", formatDisplayName(converted.Format))
 	}
 	ext, err := outputExtension(converted.Format)
@@ -572,6 +554,24 @@ func copyExclusive(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+// shouldSkipConvert 判定「源文件已满足规则、无需转换」（US-24；auto 的边界见 D-42）。
+// 批次与单张试算（PreviewConvert）共用同一份判定——同一规则不许出现两个实现。
+func shouldSkipConvert(rules BatchRules, sourceBytes int64, format string, width, height int) bool {
+	boxEnabled := rules.MaxWidth > 0
+	targetOK := rules.TargetBytes == 0 || sourceBytes <= rules.TargetBytes
+	boxOK := !boxEnabled || (width <= rules.MaxWidth && height <= rules.MaxHeight)
+	if rules.OutputFormat == imageproc.OutputAuto {
+		// auto：至少启用目标体积或尺寸盒其一且均满足才跳过；两者皆未启用时不跳过——
+		// 用户单独选 auto 正是为了重编码到最小体积格式，源文件谈不上「已达标」。
+		return (rules.TargetBytes > 0 || boxEnabled) && targetOK && boxOK
+	}
+	outFormat, err := imageproc.NormalizeOutputFormat(rules.OutputFormat, format)
+	if err != nil {
+		return false
+	}
+	return outFormat == format && targetOK && boxOK
 }
 
 // autoFormatCandidates 是「自动（最小体积）」的候选集与平局偏好序（D-43）：

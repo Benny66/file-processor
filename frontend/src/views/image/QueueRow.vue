@@ -52,6 +52,16 @@
     >
       重跑
     </button>
+    <!-- US-45：已检查的图可进调参工作台；批次运行中禁用（D-41：避免与 worker 抢 CPU）。 -->
+    <button
+      v-if="item.info && !item.error"
+      class="row__compare row__tune"
+      type="button"
+      :disabled="busy"
+      @click="emit('tune', item.path)"
+    >
+      调参
+    </button>
     <button class="row__remove" type="button" :disabled="busy" @click="emit('remove', item.path)">
       移除
     </button>
@@ -70,6 +80,7 @@ const emit = defineEmits<{
   (e: 'remove', path: string): void
   (e: 'compare', path: string): void
   (e: 'retry', path: string): void
+  (e: 'tune', path: string): void
 }>()
 
 const root = ref<HTMLElement | null>(null)
@@ -413,6 +424,10 @@ onUnmounted(() => {
 
 .row__retry {
   color: var(--color-warning);
+}
+
+.row__tune {
+  color: var(--color-primary);
 }
 
 .row__remove {
