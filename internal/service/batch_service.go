@@ -86,7 +86,7 @@ func validateBatchStart(rules BatchRules, output OutputPlan) error {
 		return err
 	}
 	if rules.OutputFormat == imageproc.OutputKeep && rules.TargetBytes == 0 && rules.MaxWidth == 0 {
-		return apperr.Validation("请选择输出格式，或开启目标体积/尺寸限制")
+		return apperr.Validation("请至少选一项：转格式、压到指定大小或限制尺寸")
 	}
 	return nil
 }
@@ -126,13 +126,13 @@ func validateOutputPlan(plan OutputPlan) error {
 		pattern = OutputPatternDefault
 	}
 	if len(pattern) > 64 {
-		return apperr.Validation("命名模板最长 64 个字符")
+		return apperr.Validation("文件名格式最长 64 个字符")
 	}
 	if !strings.Contains(pattern, "{name}") && !strings.Contains(pattern, "{n}") {
-		return apperr.Validation("命名模板需包含 {name} 或 {n}")
+		return apperr.Validation("文件名格式要包含 {name} 或 {n}")
 	}
 	if strings.ContainsAny(pattern, `/\`) || strings.Contains(pattern, "..") {
-		return apperr.Validation("命名模板不能包含路径分隔符或 ..")
+		return apperr.Validation("文件名格式不能包含 / 或 ..")
 	}
 	return nil
 }
@@ -189,15 +189,15 @@ func validateBatchRules(rules BatchRules) error {
 	}
 	if rules.TargetBytes != 0 &&
 		(rules.TargetBytes < TargetBytesMin || rules.TargetBytes > TargetBytesMax) {
-		return apperr.Validation("目标体积需在 1 KB–1 GB")
+		return apperr.Validation("大小要在 1 KB 到 1 GB 之间")
 	}
 	if (rules.MaxWidth == 0) != (rules.MaxHeight == 0) {
-		return apperr.Validation("宽高需同时设置")
+		return apperr.Validation("宽和高要一起填")
 	}
 	if rules.MaxWidth != 0 &&
 		(rules.MaxWidth < BoxMinDimension || rules.MaxWidth > BoxMaxDimension ||
 			rules.MaxHeight < BoxMinDimension || rules.MaxHeight > BoxMaxDimension) {
-		return apperr.Validation("宽高需在 1–65535 px")
+		return apperr.Validation("宽和高要在 1 到 65535 之间")
 	}
 	return nil
 }
@@ -268,7 +268,7 @@ type BatchProgress struct {
 // emit 可为 nil；非 nil 时按完成顺序推送进度。
 func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (BatchResult, error) {
 	if len(req.Items) == 0 {
-		return BatchResult{}, apperr.Validation("没有可处理的图片")
+		return BatchResult{}, apperr.Validation("请先添加要处理的图片")
 	}
 	if err := validateBatchStart(req.Rules, req.Output); err != nil {
 		return BatchResult{}, err
@@ -282,7 +282,7 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	s.batchMu.Lock()
 	if s.batchRunning {
 		s.batchMu.Unlock()
-		return BatchResult{}, apperr.Conflict("已有批次正在处理")
+		return BatchResult{}, apperr.Conflict("正在处理中，请等它完成")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s.batchRunning = true
@@ -369,9 +369,9 @@ func (s *Service) ProcessBatch(req BatchRequest, emit func(BatchProgress)) (Batc
 	}
 	summary.OK = summary.Failed == 0 && summary.Canceled == 0
 	if summary.Canceled > 0 {
-		summary.Message = "批次已取消"
+		summary.Message = "已取消"
 	} else if summary.Failed > 0 {
-		summary.Message = "批次完成，部分文件失败"
+		summary.Message = "处理完成，有文件没成功"
 	}
 	return summary, nil
 }
@@ -416,7 +416,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 	}
 	if stat.Size() > imageproc.MaxFileBytes {
 		res.Status = StatusFailed
-		res.Message = "图片超过 512 MB 上限"
+		res.Message = "图片超过 512 MB，处理不了"
 		return res
 	}
 	data, err := os.ReadFile(path)
@@ -435,7 +435,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 	}
 	if shouldSkipConvert(rules, res.SourceBytes, probe.Format, probe.Width, probe.Height) {
 		res.Status = StatusSkipped
-		res.Message = "已达标"
+		res.Message = "无需处理（原图已经合适）"
 		res.Width = probe.Width
 		res.Height = probe.Height
 		return res
@@ -458,7 +458,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 		return res
 	}
 	if rules.OutputFormat == imageproc.OutputAuto {
-		res.Message = fmt.Sprintf("自动选择 %s（最优）", formatDisplayName(converted.Format))
+		res.Message = fmt.Sprintf("已自动选了最省空间的格式（%s）", formatDisplayName(converted.Format))
 	}
 	ext, err := outputExtension(converted.Format)
 	if err != nil {
@@ -482,7 +482,7 @@ func (s *Service) convertOnce(item BatchItem, index int, rules BatchRules, outpu
 	finalPath, err := writeConvertedFile(dir, renderOutputStem(output.Pattern, stem, index), ext, converted.Data)
 	if err != nil {
 		res.Status = StatusFailed
-		res.Message = fmt.Sprintf("写入输出失败: %v", err)
+		res.Message = fmt.Sprintf("保存文件失败: %v", err)
 		return res
 	}
 	res.Status = StatusSuccess

@@ -36,7 +36,7 @@
 
           <figure class="pane">
             <figcaption class="pane__head">
-              <span class="pane__label">结果</span>
+              <span class="pane__label">处理后</span>
               <span class="pane__meta">{{ resultMeta }}</span>
             </figcaption>
             <div class="pane__stage checkerboard">
@@ -115,7 +115,7 @@ async function loadPreviews() {
   const tasks = [loadPreview(item.path, token, 'source')]
   const outputPath = item.result?.output_path
   if (outputPath) tasks.push(loadPreview(outputPath, token, 'result'))
-  else resultError.value = '没有可对比的结果文件'
+  else resultError.value = '这张图还没有处理结果'
   await Promise.all(tasks)
 }
 

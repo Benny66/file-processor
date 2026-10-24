@@ -51,7 +51,7 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 	for _, raw := range paths {
 		abs, ok := absoluteCleanPath(raw)
 		if !ok {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: raw, Reason: "路径无效"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: raw, Reason: "位置无效"})
 			continue
 		}
 		info, err := os.Lstat(abs)
@@ -60,7 +60,7 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "符号链接已跳过"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "快捷方式已跳过"})
 			continue
 		}
 		if info.IsDir() {
@@ -68,19 +68,19 @@ func (s *Service) ScanPaths(paths, skip []string) (ScanResult, error) {
 			continue
 		}
 		if !info.Mode().IsRegular() {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "不是普通文件"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "不是图片文件"})
 			continue
 		}
 		if !imageproc.IsSupportedPath(abs) {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "不支持的格式"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "不是支持的图片"})
 			continue
 		}
 		if _, ok := skipped[abs]; ok {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "已在队列中"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "已经在列表里了"})
 			continue
 		}
 		if _, ok := seen[abs]; ok {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "重复路径"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: abs, Reason: "重复了"})
 			continue
 		}
 		seen[abs] = struct{}{}
@@ -142,7 +142,7 @@ func readImageFile(path string) (string, []byte, error) {
 		return "", nil, apperr.Validation("不是普通文件")
 	}
 	if stat.Size() > imageproc.MaxFileBytes {
-		return "", nil, apperr.Validation("图片超过 512 MB 上限")
+		return "", nil, apperr.Validation("图片超过 512 MB，处理不了")
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
@@ -171,7 +171,7 @@ func scanImageDirectory(root string, skipped, seen map[string]struct{}, result *
 			return nil
 		}
 		if d.Type()&os.ModeSymlink != 0 {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "符号链接已跳过"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "快捷方式已跳过"})
 			return nil
 		}
 		if d.IsDir() {
@@ -181,11 +181,11 @@ func scanImageDirectory(root string, skipped, seen map[string]struct{}, result *
 			return nil
 		}
 		if _, ok := skipped[path]; ok {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "已在队列中"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "已经在列表里了"})
 			return nil
 		}
 		if _, ok := seen[path]; ok {
-			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "重复路径"})
+			result.Rejected = append(result.Rejected, ScanRejection{Path: path, Reason: "重复了"})
 			return nil
 		}
 		info, err := d.Info()
@@ -207,7 +207,7 @@ func scanImageDirectory(root string, skipped, seen map[string]struct{}, result *
 		})
 		return nil
 	}); err != nil {
-		result.Rejected = append(result.Rejected, ScanRejection{Path: root, Reason: "扫描目录失败"})
+		result.Rejected = append(result.Rejected, ScanRejection{Path: root, Reason: "文件夹读取失败"})
 	}
 }
 

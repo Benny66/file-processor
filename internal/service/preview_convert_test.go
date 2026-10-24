@@ -64,7 +64,7 @@ func TestPreviewConvertSkipsCompliant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewConvert 失败: %v", err)
 	}
-	if result.Status != string(StatusSkipped) || !strings.Contains(result.Message, "已达标") {
+	if result.Status != string(StatusSkipped) || !strings.Contains(result.Message, "无需处理") {
 		t.Fatalf("应已达标：%+v", result)
 	}
 	if result.PreviewURL == "" {
@@ -106,7 +106,7 @@ func TestPreviewConvertAutoReportsChosenFormat(t *testing.T) {
 	if result.Status != string(StatusSuccess) {
 		t.Fatalf("auto 试算未成功：%+v", result)
 	}
-	if !strings.Contains(result.Message, "自动选择") {
+	if !strings.Contains(result.Message, "已自动选了最省空间的格式") {
 		t.Errorf("auto 未回传所选格式：%+v", result)
 	}
 }
@@ -130,7 +130,7 @@ func TestPreviewConvertCorruptFileIsReadableError(t *testing.T) {
 	if err == nil {
 		t.Fatal("损坏文件应返回错误")
 	}
-	if !strings.Contains(err.Error(), "无法识别") {
+	if !strings.Contains(err.Error(), "认不出") {
 		t.Errorf("错误应可读（含原因）：%v", err)
 	}
 }

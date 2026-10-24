@@ -3,7 +3,7 @@
     <header class="workbench__head">
       <div class="workbench__intro">
         <h1 class="workbench__title">图片处理</h1>
-        <p class="workbench__desc">批量转换格式、压缩体积、限制尺寸。图片只在本机处理。</p>
+        <p class="workbench__desc">批量转换、压缩图片。全程在本机完成，不上传。</p>
       </div>
       <div class="workbench__actions">
         <span v-if="items.length > 0" class="workbench__count">{{ items.length }} 项</span>
@@ -25,7 +25,7 @@
 
     <div class="presets">
       <label class="field" for="preset-select">
-        <span class="field__label">预设</span>
+        <span class="field__label">常用设置</span>
         <select
           id="preset-select"
           class="select select--preset"
@@ -33,20 +33,20 @@
           :disabled="busy || presets.length === 0"
           @change="onPresetSelect"
         >
-          <option value="">{{ presets.length === 0 ? '暂无预设' : '选择预设…' }}</option>
+          <option value="">{{ presets.length === 0 ? '还没保存过设置' : '选择常用设置…' }}</option>
           <option v-for="preset in presets" :key="preset.id" :value="String(preset.id)">
             {{ preset.name }}
           </option>
         </select>
       </label>
       <button class="btn" type="button" :disabled="busy" @click="openPresetDialog">
-        管理预设
+        管理常用设置
       </button>
     </div>
 
     <div v-if="items.length > 0" class="rules">
       <label class="field" for="output-format">
-        <span class="field__label">输出格式</span>
+        <span class="field__label">转成哪种格式</span>
         <select
           id="output-format"
           class="select"
@@ -105,7 +105,7 @@
           :disabled="busy"
           @change="onTargetToggle"
         />
-        <span class="field__label">目标体积</span>
+        <span class="field__label">压到指定大小</span>
       </label>
       <template v-if="targetEnabled">
         <input
@@ -193,7 +193,7 @@
     </p>
 
     <div v-if="resultsStale" class="notice notice--stale" role="status">
-      <span class="notice__text">参数或队列已变化，已有结果标记为过期；重新开始处理可更新。</span>
+      <span class="notice__text">设置改过了，重新点「开始处理」即可。</span>
     </div>
     <div v-if="importNote" class="notice" role="status" :title="importNote.detail">
       <span class="notice__text">{{ importNote.text }}</span>
@@ -210,7 +210,7 @@
         type="button"
         @click="retryUnfinished"
       >
-        重跑失败/未完成项（{{ retryCount }}）
+        把没成功的 {{ retryCount }} 张再试一次
       </button>
       <button class="notice__close" type="button" aria-label="关闭处理结果" @click="dismissSummary">
         ×
@@ -426,7 +426,7 @@ const formatOptions: { value: OutputFormatValue; label: string }[] = [
   { value: OutputFormat.PNG, label: 'PNG' },
   { value: OutputFormat.WebP, label: 'WebP' },
   // US-49：每项最多 3 次完整编码（有目标体积时最多 ~24 次整图编码），选项文案如实标注较慢。
-  { value: OutputFormat.Auto, label: '自动（最小体积，较慢）' },
+  { value: OutputFormat.Auto, label: '自动选最省空间的（较慢）' },
 ]
 
 const {
@@ -794,10 +794,10 @@ function refreshBatchSummary() {
         break
     }
   }
-  const parts = [`成功 ${success}`, `失败 ${failed}`]
-  if (skipped > 0) parts.push(`跳过 ${skipped}`)
+  const parts = [`已完成 ${success}`, `失败 ${failed}`]
+  if (skipped > 0) parts.push(`无需处理 ${skipped}`)
   if (canceled > 0) parts.push(`取消 ${canceled}`)
-  if (extreme > 0) parts.push(`极端降级 ${extreme}`)
+  if (extreme > 0) parts.push(`画质变差了 ${extreme}`)
   let text = `处理完成：${parts.join('、')}`
   // US-27：批次总计给出字节与百分比；输出更大时说「累计增加」。
   if (saved !== 0) {

@@ -63,22 +63,22 @@ func probeImage(data []byte, path string) (*imageProbe, error) {
 
 	format := detectContentFormat(data)
 	if format == "" {
-		return nil, apperr.Validation("无法识别的图片格式")
+		return nil, apperr.Validation("认不出这是什么图片")
 	}
 	var warnings []string
 	if extFormat := FormatFromPath(path); extFormat != "" && extFormat != format {
 		warnings = append(warnings, fmt.Sprintf(
-			"扩展名与实际格式不一致（%s → %s）",
+			"文件后缀和实际格式不一样（%s → %s）",
 			strings.ToUpper(filepath.Ext(path)),
 			strings.ToUpper(format),
 		))
 	}
 
 	if format == "gif" && isAnimatedGIF(data) {
-		return nil, apperr.Validation("首版不支持动图")
+		return nil, apperr.Validation("会动的图片（动图）暂不支持")
 	}
 	if format == "webp" && isAnimatedWebP(data) {
-		return nil, apperr.Validation("首版不支持动图")
+		return nil, apperr.Validation("会动的图片（动图）暂不支持")
 	}
 
 	orientation, orientErr := parseOrientation(data)
@@ -169,6 +169,20 @@ func Inspect(data []byte, path string) (Info, error) {
 		Thumbnail: thumbnail,
 		Warning:   strings.Join(p.warnings, "；"),
 	}, nil
+}
+
+// ThumbnailDataURL 解码图片字节并生成缩略图 data URL（历史记录用：成功项喂输出
+// 字节——通常已小于原图，代价可控；解码走内容探测，不依赖驱动注册）。
+func ThumbnailDataURL(data []byte, maxEdge int) (string, error) {
+	format := detectContentFormat(data)
+	if format == "" {
+		return "", apperr.Validation("认不出这是什么图片")
+	}
+	img, err := decodeImage(format, data)
+	if err != nil {
+		return "", apperr.Wrap(err)
+	}
+	return makeThumbnail(img, maxEdge)
 }
 
 func detectContentFormat(data []byte) string {

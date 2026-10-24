@@ -11,13 +11,13 @@
       >
         <header class="preset-dialog__head">
           <div>
-            <h2 id="preset-dialog-title" class="preset-dialog__title">预设管理</h2>
-            <p class="preset-dialog__subtitle">把常用参数保存为预设，应用时只更新参数，不会自动开始处理。</p>
+            <h2 id="preset-dialog-title" class="preset-dialog__title">管理常用设置</h2>
+            <p class="preset-dialog__subtitle">给常用的处理设置起个名字保存，下次一键套用；套用后不会自动开始处理。</p>
           </div>
           <button
             class="preset-dialog__close"
             type="button"
-            aria-label="关闭预设管理"
+            aria-label="关闭常用设置管理"
             @click="emit('close')"
           >
             ×
@@ -25,7 +25,7 @@
         </header>
 
         <section class="preset-dialog__save">
-          <label class="preset-dialog__label" for="preset-name">预设名称</label>
+          <label class="preset-dialog__label" for="preset-name">设置名称</label>
           <input
             id="preset-name"
             v-model="newName"
@@ -47,11 +47,11 @@
 
         <p v-if="error" class="preset-dialog__error" role="alert">{{ error }}</p>
         <p v-if="loadError" class="preset-dialog__error" role="alert">
-          加载预设失败：{{ loadError }}
+          加载常用设置失败：{{ loadError }}
         </p>
 
         <div class="preset-dialog__body">
-          <ul v-if="presets.length > 0" class="preset-list" aria-label="已保存的预设">
+          <ul v-if="presets.length > 0" class="preset-list" aria-label="已保存的常用设置">
             <li v-for="preset in presets" :key="preset.id" class="preset-row">
               <template v-if="renamingId === preset.id">
                 <input
@@ -113,7 +113,7 @@
           </ul>
           <p v-else-if="loading" class="preset-dialog__empty">加载中…</p>
           <p v-else class="preset-dialog__empty">
-            暂无预设。输入名称后，可将当前参数保存为第一个预设。
+            还没有保存过设置。起个名字，就能把当前设置存下来。
           </p>
         </div>
       </div>
@@ -206,7 +206,7 @@ function saveCurrent() {
   if (busy.value) return
   const name = newName.value.trim()
   if (!name) {
-    error.value = '请输入预设名称'
+    error.value = '请给这组设置起个名字'
     return
   }
   const preset = new model.ImagePreset({ name, ...props.rules })
@@ -230,7 +230,7 @@ function confirmRename(preset: Preset) {
   if (busy.value) return
   const name = renameValue.value.trim()
   if (!name) {
-    error.value = '请输入预设名称'
+    error.value = '请给这组设置起个名字'
     return
   }
   const payload = presetPayload(preset, name)
@@ -246,7 +246,7 @@ async function removePreset(preset: Preset) {
   busy.value = true
   try {
     const confirmed = await invoke(
-      () => Confirm('删除预设', `确定删除「${preset.name}」？此操作不可撤销。`),
+      () => Confirm('删除常用设置', `确定删除「${preset.name}」？删除后找不回来。`),
       'Confirm',
     )
     if (!confirmed) return

@@ -110,7 +110,7 @@ func TestInspectWarnsExtensionMismatch(t *testing.T) {
 	if info.Format != "png" {
 		t.Fatalf("Format = %q，期望 png", info.Format)
 	}
-	if !strings.Contains(info.Warning, "不一致") {
+	if !strings.Contains(info.Warning, "不一样") {
 		t.Errorf("扩展名不一致没有 warning：%q", info.Warning)
 	}
 }
@@ -122,7 +122,7 @@ func TestInspectRejectsAnimated(t *testing.T) {
 
 func TestInspectRejectsCorrupt(t *testing.T) {
 	assertInspectError(t, []byte{0xFF, 0xD8, 0xFF, 0x00, 0x00}, "image.jpg", "无法解码")
-	assertInspectError(t, []byte("hello"), "image.jpg", "无法识别")
+	assertInspectError(t, []byte("hello"), "image.jpg", "认不出")
 }
 
 func TestInspectRejectsPixelLimit(t *testing.T) {

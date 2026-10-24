@@ -30,8 +30,8 @@
       <span v-if="outputSize" class="row__output">→ {{ outputSize }}</span>
     </div>
     <span class="row__status" :class="statusClass">{{ statusLabel }}</span>
-    <span v-if="item.result && stale" class="row__stale">结果已过期</span>
-    <span v-if="item.result?.extreme_degraded" class="row__extreme">已明显降质</span>
+    <span v-if="item.result && stale" class="row__stale">设置改过了</span>
+    <span v-if="item.result?.extreme_degraded" class="row__extreme">画质变差了</span>
     <!-- US-14：处理期间仍要能查看结果，所以对比不受 busy 限制；
          US-06 只禁止「编辑队列」，移除按钮才需要 busy。 -->
     <button
@@ -110,9 +110,9 @@ function statusPresentation(): { label: string; cls: string } {
 }
 
 const RESULT_STATUS: Record<ItemStatusValue, { label: string; cls: string }> = {
-  [ItemStatus.Success]: { label: '成功', cls: 'row__status--ok' },
+  [ItemStatus.Success]: { label: '已完成', cls: 'row__status--ok' },
   [ItemStatus.Failed]: { label: '失败', cls: 'row__status--failed' },
-  [ItemStatus.Skipped]: { label: '已跳过', cls: 'row__status--skipped' },
+  [ItemStatus.Skipped]: { label: '无需处理', cls: 'row__status--skipped' },
   [ItemStatus.Canceled]: { label: '已取消', cls: 'row__status--canceled' },
   [ItemStatus.Processing]: { label: '处理中', cls: 'row__status--busy' },
 }
@@ -131,7 +131,7 @@ const error = computed(() => {
 const warning = computed(() => {
   const parts: string[] = []
   if (props.item.result?.status === ItemStatus.Skipped) {
-    parts.push(props.item.result.message || '已跳过')
+    parts.push(props.item.result.message || '无需处理')
   }
   // US-49：auto 格式的「自动选择 XX（最优）」随成功结果回传，这里转述。
   if (props.item.result?.status === ItemStatus.Success && props.item.result.message) {
@@ -139,7 +139,7 @@ const warning = computed(() => {
   }
   // US-20：铺白由引擎判定并回传（alpha_flattened），前端只转述不再判断。
   if (props.item.result?.alpha_flattened) {
-    parts.push('透明背景已铺白')
+    parts.push('透明背景已填成白色')
   }
   if (props.item.info?.warning) {
     parts.push(props.item.info.warning)

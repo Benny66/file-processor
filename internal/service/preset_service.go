@@ -20,7 +20,7 @@ func validatePersistedRules(rules BatchRules) error {
 		return err
 	}
 	if rules.TargetBytes != 0 && rules.TargetBytes%1024 != 0 {
-		return apperr.Validation("目标体积需为整数 KB 或 MB")
+		return apperr.Validation("大小要填整 KB 或整 MB")
 	}
 	return nil
 }
@@ -60,7 +60,7 @@ func (s *Service) GetImageSettings() (ImageSettings, error) {
 	if outputErr != nil {
 		settings.Output = OutputPlan{}
 	}
-	return settings, fmt.Errorf("图片设置无效，已使用默认值: %w", errors.Join(rulesErr, outputErr))
+	return settings, fmt.Errorf("上次设置有问题，已用回默认: %w", errors.Join(rulesErr, outputErr))
 }
 
 // SaveImageSettings 校验并持久化上次使用的处理参数（规则 + 输出目的地）。
@@ -108,7 +108,7 @@ func (s *Service) ListPresets(req page.Request) (page.Result[model.ImagePreset],
 func (s *Service) SavePreset(preset model.ImagePreset) (model.ImagePreset, error) {
 	name := strings.TrimSpace(preset.Name)
 	if name == "" {
-		return model.ImagePreset{}, apperr.Validation("请输入预设名称")
+		return model.ImagePreset{}, apperr.Validation("请给这组设置起个名字")
 	}
 	rules := BatchRules{
 		OutputFormat: preset.OutputFormat,
@@ -132,7 +132,7 @@ func (s *Service) SavePreset(preset model.ImagePreset) (model.ImagePreset, error
 		return model.ImagePreset{}, apperr.Wrap(fmt.Errorf("校验预设名称失败: %w", err))
 	}
 	if duplicates > 0 {
-		return model.ImagePreset{}, apperr.Validation("预设名称已存在")
+		return model.ImagePreset{}, apperr.Validation("这个名字已经用过了，请换一个")
 	}
 
 	if preset.ID == 0 {
@@ -152,7 +152,7 @@ func (s *Service) SavePreset(preset model.ImagePreset) (model.ImagePreset, error
 	var existing model.ImagePreset
 	if err := s.db.First(&existing, preset.ID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return model.ImagePreset{}, apperr.NotFound("预设不存在")
+			return model.ImagePreset{}, apperr.NotFound("这组设置已经不存在了")
 		}
 		return model.ImagePreset{}, apperr.Wrap(fmt.Errorf("读取预设失败: %w", err))
 	}

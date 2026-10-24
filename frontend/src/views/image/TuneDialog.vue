@@ -1,10 +1,10 @@
 <template>
   <Teleport to="body">
     <div v-if="open && item" class="tune__overlay" @click.self="emit('close')">
-      <div ref="panel" class="tune" role="dialog" aria-label="单张调参工作台">
+      <div ref="panel" class="tune" role="dialog" aria-label="单张试一试">
         <header class="tune__head">
-          <div class="tune__title" :title="item.path">调参 · {{ item.name }}</div>
-          <button class="tune__close" type="button" aria-label="关闭调参" @click="emit('close')">
+          <div class="tune__title" :title="item.path">单张试一试 · {{ item.name }}</div>
+          <button class="tune__close" type="button" aria-label="关闭单张试一试" @click="emit('close')">
             ×
           </button>
         </header>
@@ -70,7 +70,7 @@
 
             <p v-if="busyHint" class="tune__hint">{{ busyHint }}</p>
             <!-- 结果：体积/尺寸/质量都来自 Go 的真实试算，预览图不参与测量（US-46）。 -->
-            <p v-else-if="trialBusy" class="tune__hint">试算中…</p>
+            <p v-else-if="trialBusy" class="tune__hint">正在试效果…</p>
             <p v-else-if="trialError" class="tune__hint tune__hint--error">{{ trialError }}</p>
             <div v-else-if="trial" class="tune__result">
               <p class="tune__numbers">{{ resultLine }}</p>
@@ -80,7 +80,7 @@
                 <span v-if="trial.alpha_flattened" class="tune__badge">透明背景已铺白</span>
               </div>
             </div>
-            <p v-else class="tune__hint">修改规则后自动试算；体积与质量为真实编码结果。</p>
+            <p v-else class="tune__hint">改一改设置，马上能看到效果；大小和清晰度都是真实结果。</p>
 
             <!-- US-50 三格式竞速：同一张图按当前规则分别跑 JPEG/WebP/PNG，最小行高亮，点选采用。 -->
             <button
@@ -89,7 +89,7 @@
               :disabled="!!busyHint || raceBusy"
               @click="runRace"
             >
-              {{ raceBusy ? '竞速中…' : '三格式竞速' }}
+              {{ raceBusy ? '比一比中…' : '三种格式比一比' }}
             </button>
             <table v-if="raceRows.length > 0" class="tune__race">
               <thead>
@@ -247,7 +247,7 @@ let trialToken = 0
 let trialTimer: ReturnType<typeof setTimeout> | null = null
 
 const busyHint = computed(() =>
-  props.busy ? '批次处理进行中，试算已暂停（取消或等待完成后再调参）' : '',
+  props.busy ? '正在处理图片，等它完成后再来试效果' : '',
 )
 
 async function runTrial() {
@@ -266,7 +266,7 @@ async function runTrial() {
   } catch (e) {
     if (token !== trialToken) return
     trial.value = null
-    trialError.value = e instanceof Error ? e.message : '试算暂时不可用'
+    trialError.value = e instanceof Error ? e.message : '试效果暂时不可用'
     logWarn('试算失败', e)
   } finally {
     if (token === trialToken) trialBusy.value = false
@@ -516,7 +516,7 @@ async function runRace() {
         bytes: 0,
         quality: 0,
         dims: '—',
-        note: result?.message ?? '试算失败',
+        note: result?.message ?? '试效果失败',
         adoptable: false,
         isBest: false,
       }

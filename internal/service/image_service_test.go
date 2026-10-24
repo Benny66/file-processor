@@ -84,7 +84,7 @@ func TestScanPathsDirectFilesAndRejections(t *testing.T) {
 	if result.Files[0].Name != "a.jpg" || result.Files[0].Size != 3 {
 		t.Errorf("文件元信息不对：%+v", result.Files[0])
 	}
-	if r, ok := scanRejectionByPath(result, note); !ok || r.Reason != "不支持的格式" {
+	if r, ok := scanRejectionByPath(result, note); !ok || r.Reason != "不是支持的图片" {
 		t.Errorf("不支持的格式未正确标记：%+v", result.Rejected)
 	}
 	if r, ok := scanRejectionByPath(result, missing); !ok || r.Reason != "无法访问" {
@@ -105,7 +105,7 @@ func TestScanPathsDeduplicatesAndSkipsQueued(t *testing.T) {
 	if len(result.Files) != 1 || result.Files[0].Path != image {
 		t.Fatalf("同一路径应只出现一次：%+v", result.Files)
 	}
-	if r, ok := scanRejectionByPath(result, image); !ok || r.Reason != "重复路径" {
+	if r, ok := scanRejectionByPath(result, image); !ok || r.Reason != "重复了" {
 		t.Errorf("扫描内重复未标记：%+v", result.Rejected)
 	}
 
@@ -116,7 +116,7 @@ func TestScanPathsDeduplicatesAndSkipsQueued(t *testing.T) {
 	if len(result.Files) != 0 {
 		t.Fatalf("已在队列中的文件不应再次入队：%+v", result.Files)
 	}
-	if r, ok := scanRejectionByPath(result, image); !ok || r.Reason != "已在队列中" {
+	if r, ok := scanRejectionByPath(result, image); !ok || r.Reason != "已经在列表里了" {
 		t.Errorf("队列重复未标记：%+v", result.Rejected)
 	}
 }
@@ -138,7 +138,7 @@ func TestScanPathsSkipsSymlinks(t *testing.T) {
 	if len(result.Files) != 1 || result.Files[0].Path != target {
 		t.Fatalf("符号链接不应入队，目标文件应保留：%+v", result.Files)
 	}
-	if r, ok := scanRejectionByPath(result, link); !ok || r.Reason != "符号链接已跳过" {
+	if r, ok := scanRejectionByPath(result, link); !ok || r.Reason != "快捷方式已跳过" {
 		t.Errorf("符号链接未正确标记：%+v", result.Rejected)
 	}
 	if len(result.Rejected) != 1 {

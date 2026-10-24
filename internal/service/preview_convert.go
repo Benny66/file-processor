@@ -36,7 +36,7 @@ func (s *Service) PreviewConvert(path string, rules BatchRules) (PreviewConvertR
 	running := s.batchRunning
 	s.batchMu.Unlock()
 	if running {
-		return PreviewConvertResult{}, apperr.Conflict("批次处理进行中，暂不能试算")
+		return PreviewConvertResult{}, apperr.Conflict("正在处理图片，请等它完成再试效果")
 	}
 	if err := validateBatchRules(rules); err != nil {
 		return PreviewConvertResult{}, err
@@ -60,7 +60,7 @@ func (s *Service) PreviewConvert(path string, rules BatchRules) (PreviewConvertR
 		}
 		return PreviewConvertResult{
 			Status:     string(StatusSkipped),
-			Message:    "已达标，不会产出文件",
+			Message:    "无需处理（原图已经合适）",
 			Width:      probe.Width,
 			Height:     probe.Height,
 			PreviewURL: previewURL,
@@ -85,12 +85,12 @@ func (s *Service) PreviewConvert(path string, rules BatchRules) (PreviewConvertR
 
 	preview, previewErr := imageproc.RenderPreview(converted.Data, abs, previewMaxEdge)
 	if previewErr != nil {
-		return PreviewConvertResult{Status: string(StatusFailed), Message: "渲染输出预览失败"}, nil
+		return PreviewConvertResult{Status: string(StatusFailed), Message: "生成预览失败了"}, nil
 	}
 
 	message := ""
 	if rules.OutputFormat == imageproc.OutputAuto {
-		message = "自动选择 " + formatDisplayName(converted.Format) + "（最优）"
+		message = "已自动选了最省空间的格式（" + formatDisplayName(converted.Format) + "）"
 	}
 	return PreviewConvertResult{
 		Status:          string(StatusSuccess),

@@ -69,7 +69,7 @@ func ValidateOutputFormat(format string) error {
 	case OutputKeep, OutputJPEG, OutputPNG, OutputWebP, OutputAuto:
 		return nil
 	default:
-		return apperr.Validation("输出格式非法")
+		return apperr.Validation("转成的格式不对")
 	}
 }
 
@@ -84,12 +84,12 @@ func NormalizeOutputFormat(format, sourceFormat string) (string, error) {
 		case "gif", "bmp", "tiff":
 			return OutputPNG, nil
 		default:
-			return "", apperr.Validation("无法确定输出格式")
+			return "", apperr.Validation("认不出原图的格式")
 		}
 	case OutputAuto, OutputJPEG, OutputPNG, OutputWebP:
 		return format, nil
 	default:
-		return "", apperr.Validation("输出格式非法")
+		return "", apperr.Validation("转成的格式不对")
 	}
 }
 
@@ -182,7 +182,7 @@ func encodeToTarget(img image.Image, width, height int, format string, opts Conv
 				}, nil
 			}
 			if currentW <= 1 && currentH <= 1 {
-				return Converted{}, apperr.Validation("目标体积过小，无法达到")
+				return Converted{}, apperr.Validation("这个大小压不到，请调大一点")
 			}
 			nextW, nextH := shrinkDimensions(currentW, currentH, opts.TargetBytes, int64(len(data)))
 			current = resizeImage(img, nextW, nextH)
@@ -210,7 +210,7 @@ func encodeToTarget(img image.Image, width, height int, format string, opts Conv
 			}, nil
 		}
 		if currentW <= 1 && currentH <= 1 {
-			return Converted{}, apperr.Validation("目标体积过小，无法达到")
+			return Converted{}, apperr.Validation("这个大小压不到，请调大一点")
 		}
 		nextW, nextH := shrinkDimensions(currentW, currentH, opts.TargetBytes, int64(len(minData)))
 		current = resizeImage(img, nextW, nextH)
@@ -238,7 +238,7 @@ func searchQuality(img image.Image, format string, target int64) ([]byte, int, e
 		}
 	}
 	if best == nil {
-		return nil, 0, apperr.Validation("目标体积过小，无法达到")
+		return nil, 0, apperr.Validation("这个大小压不到，请调大一点")
 	}
 	return best, bestQuality, nil
 }
@@ -354,7 +354,7 @@ func encodeImage(img image.Image, format string, quality int) ([]byte, error) {
 			return nil, apperr.Wrap(err)
 		}
 	default:
-		return nil, apperr.Validation("输出格式非法")
+		return nil, apperr.Validation("转成的格式不对")
 	}
 	return buf.Bytes(), nil
 }

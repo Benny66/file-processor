@@ -142,7 +142,7 @@ func TestProcessBatchContinuesAfterFailure(t *testing.T) {
 	if len(result.Items) != 2 {
 		t.Fatalf("结果条数 = %d", len(result.Items))
 	}
-	if result.Items[0].Status != StatusFailed || !strings.Contains(result.Items[0].Message, "无法识别") {
+	if result.Items[0].Status != StatusFailed || !strings.Contains(result.Items[0].Message, "认不出") {
 		t.Errorf("损坏文件结果不对：%+v", result.Items[0])
 	}
 	if result.Items[1].Status != StatusSuccess || result.Items[1].OutputPath == "" {
@@ -190,7 +190,7 @@ func TestProcessBatchLogsEachFailure(t *testing.T) {
 	if !strings.Contains(logged, corrupt) {
 		t.Errorf("日志缺路径：%q", logged)
 	}
-	if !strings.Contains(logged, "无法识别") {
+	if !strings.Contains(logged, "认不出") {
 		t.Errorf("日志缺原因：%q", logged)
 	}
 	if strings.Contains(logged, body) {
@@ -267,7 +267,7 @@ func TestProcessBatchBoxSkipsCompliantAndResizesOversized(t *testing.T) {
 	if result.Success != 1 || result.Skipped != 2 || result.Failed != 0 {
 		t.Fatalf("批次统计不对：%+v", result)
 	}
-	if result.Items[0].Status != StatusSkipped || result.Items[0].Message != "已达标" {
+	if result.Items[0].Status != StatusSkipped || result.Items[0].Message != "无需处理（原图已经合适）" {
 		t.Errorf("within 应跳过：%+v", result.Items[0])
 	}
 	resized := result.Items[1]
@@ -396,7 +396,7 @@ func TestProcessBatchTargetSkipsSmallSource(t *testing.T) {
 		t.Fatalf("批次统计不对：%+v", result)
 	}
 	item := result.Items[0]
-	if item.Status != StatusSkipped || item.Message != "已达标" || item.OutputPath != "" {
+	if item.Status != StatusSkipped || item.Message != "无需处理（原图已经合适）" || item.OutputPath != "" {
 		t.Errorf("应已达标跳过：%+v", item)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "small-out.png")); !os.IsNotExist(err) {
@@ -573,7 +573,7 @@ func TestProcessBatchAutoFormatPicksSmallest(t *testing.T) {
 	if int(item.OutputBytes) != minSize {
 		t.Errorf("auto 输出体积 = %d，期望三格式最小值 %d（%v）", item.OutputBytes, minSize, sizes)
 	}
-	if !strings.Contains(item.Message, "自动选择") || !strings.Contains(item.Message, "（最优）") {
+	if !strings.Contains(item.Message, "已自动选了最省空间的格式") {
 		t.Errorf("auto 未回传所选格式：%+v", item)
 	}
 }
@@ -598,7 +598,7 @@ func TestProcessBatchAutoSkipsCompliant(t *testing.T) {
 		t.Fatalf("ProcessBatch 失败: %v", err)
 	}
 	item := result.Items[0]
-	if item.Status != StatusSkipped || item.Message != "已达标" || item.OutputPath != "" {
+	if item.Status != StatusSkipped || item.Message != "无需处理（原图已经合适）" || item.OutputPath != "" {
 		t.Fatalf("auto 应按体积达标跳过：%+v", item)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "small-out.png")); !os.IsNotExist(err) {
