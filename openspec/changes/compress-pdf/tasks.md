@@ -8,3 +8,4 @@
 - [x] 6. 前端 `views/image`：导入预筛接受 `.pdf`；规则区纯 PDF 批禁用+说明；队列行 PDF 徽标与消息展示；历史/下载行零改动验证（`-out.pdf`）。
 - [x] 7. GLOSSARY 录入词条（压缩 PDF / PDF 已经很紧凑 / 加密与签名说明）；README「能做什么」补 PDF 行；`docs/map.md` 登记 `pdf.go`。
 - [ ] 8. `make test` / `make lint` 全绿；真机冒烟：拖入扫描件 PDF + 图片混批，验证队列、暂存、下载、历史。
+- [x] 9. 扫描页降采样（ADR-0010）：`scanImageTargets` 满页单图识别 + 150 DPI 下限 + `ImagesDownsampled` 统计与消息转述；夹具测试：300 DPI 扫描页压到 600px、72 DPI 导入页不触发；GLOSSARY 补「压到了屏幕清晰度」。

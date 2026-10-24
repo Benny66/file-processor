@@ -17,7 +17,8 @@ func CompressPDF(ctx context.Context, src []byte) (out []byte, stats PDFStats, e
 ## 图像重压缩的取舍（spike 结论固化）
 
 - 只处理「单一 DCTDecode + DeviceRGB/DeviceGray + 8bpc」：标准库 `image/jpeg` 可解码，重编码语义清晰。
-- **不缩小像素**：质量下限 75 + 原分辨率，是「不能变不清楚」的可承诺形态；重编码后不小于原图则跳过（已紧凑的图不降质）。
+- 扫描页降采样（ADR-0010，默认开启）：`scanImageTargets` 先按页树定位「满页单图」（资源唯一图像 XObject + 长宽比 ±15% 匹配页面，/Rotate 已换轴），从页面尺寸精确算有效 DPI，高于 150 才给降采样目标；缩放直接复用图片管线的 `resizeImage`（CatmullRom）。窄带：DPI 略超 150 时目标像素恰等于原尺寸，回落普通重存而非跳过。跨页共享同一图像而页尺寸不同（目标矛盾）时放弃该图不缩。实现坑：pdfcpu `ReadContext` 后 `PageCount` 为 0，须先 `EnsurePageCount` 再 `PageDict`，否则识别静默失效。
+- **质量下限 75 + 仅更小才替换**：已是 75 档以下的图天然跳过（已紧凑的图不降质）；像素尺寸只对满页扫描图例外（见上条）。
 - **SMask（透明蒙版）原样保留**，不解不删（spike 为测试删过，真实实现禁止——JPEG 无 alpha，蒙版独立成对象）。
 - 跳过即诚实计数并分原因：Flate 图像、JBIG2、CCITT、JPX、Indexed 色彩空间等不在 v1 处理面，计「不支持的图片类型」；重存不更小计「已经很省空间」——逐项消息如实转述（词汇见 GLOSSARY）。
 - 加密 / 签名 PDF：读入阶段检测（`api.ReadContext` 报错 / V 字段存在），返回业务错误「加密的 PDF 暂不支持」/「带签名的 PDF 不改动」，不静默降级。

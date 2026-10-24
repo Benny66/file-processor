@@ -468,7 +468,11 @@ func (s *Service) compressOnePDF(ctx context.Context, item BatchItem, index int,
 func pdfSuccessMessage(stats imageproc.PDFStats) string {
 	var parts []string
 	if stats.ImagesReplaced > 0 {
-		parts = append(parts, fmt.Sprintf("重新保存了 %d 张图片", stats.ImagesReplaced))
+		s := fmt.Sprintf("重新保存了 %d 张图片", stats.ImagesReplaced)
+		if stats.ImagesDownsampled > 0 {
+			s += fmt.Sprintf("（其中 %d 张压到了屏幕清晰度）", stats.ImagesDownsampled)
+		}
+		parts = append(parts, s)
 	}
 	var reasons []string
 	if stats.ImagesUnsupported > 0 {
